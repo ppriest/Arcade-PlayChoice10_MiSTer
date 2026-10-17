@@ -1,0 +1,4 @@
+QUARTUS_VERSION = "17.0"
+# PlayChoice10_stp is the instrumented revision (ISSP probes, OSD debug page); PlayChoice10 the release.
+PROJECT_REVISION = "PlayChoice10_stp"
+PROJECT_REVISION = "PlayChoice10"
