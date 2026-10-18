@@ -29,10 +29,10 @@ with Quartus Prime 17.0.2 Lite for the DE10-nano. This is an extension of
 
 ## History
 
-- `Arcade-PlayChoice10_20261018.rbf`: first release, built from `22e84c0` (release revision,
-  fitter seed default, every clock met, worst `clk_sys` setup slack +1.609 ns). All 56 sets have
-  an `.mra`; Super Mario Bros., Super Mario Bros. 3, Metroid and The Goonies have run on the
-  board, and a three-game cabinet.
+`Arcade-PlayChoice10_20261018.rbf`: **alpha release**
+- Build your own gamelist of 10 games, or there's one MRA for each of the individual titles
+- No lightgun support yet
+- Alpha as not hugely tested. Based on the MiSTer-devel NES core though
 
 ## Screenshots
 
