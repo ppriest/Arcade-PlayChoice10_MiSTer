@@ -132,9 +132,10 @@ Each individual game has its own `.mra`, however you can build an MRA for any pe
 
 The real cabinet holds up to ten carts, so unlike e.g. MAME, you cna build your own multi-slot configuration.
 
-- **Pick them on a page:** open [`tools/cabinet_builder.html`](tools/cabinet_builder.html) from
-  disk in any browser (no network needed), pick up to ten games, order them, and download the
-  `.mra`.
+- **Pick them on a page:** open the
+  [cabinet builder](https://mister-mame-coverage-docs.vercel.app/cabinet_builder.html), pick up
+  to ten games, order them, and download the `.mra`. The same page is in
+  [`tools/cabinet_builder.html`](tools/cabinet_builder.html) and runs from disk with no network.
 - **Or from the command line:**
   `python scripts/build_mra.py --cabinet "My Cabinet" pc_smb3 pc_mman3 pc_ngaid`, channel 1
   first.
