@@ -29,6 +29,12 @@ with Quartus Prime 17.0.2 Lite for the DE10-nano. This is an extension of
 
 ## History
 
+`Arcade-PlayChoice10_20261019.rbf`: **alpha release**
+- Zapper support for Duck Hunt, Hogan's Alley and Wild Gunman: mouse, analog stick or d-pad, with an
+  optional crosshair
+- CRT Adjust (H-Position, V-Shift, H-Size) for the analog output
+- NES-only OSD options removed
+
 `Arcade-PlayChoice10_20261018.rbf`: **alpha release**
 - Build your own gamelist of 10 games, or there's one MRA for each of the individual titles
 - No lightgun support yet
@@ -183,7 +189,7 @@ combinational cells, two per ALM.
 
 ![Floorplan of PlayChoice10](docs/floorplan/PlayChoice10.png)
 
-`22e84c0`, fitted Oct 18 2026; per-block counts in `docs/floorplan/PlayChoice10_groups.md`.
+`845aeaf`, fitted Oct 18 2026; per-block counts in `docs/floorplan/PlayChoice10_groups.md`.
 
 ## Installation
 
@@ -213,15 +219,20 @@ core, whichever game or cabinet runs.
 
 Directions are the arrows (player 2: R F D G).
 
+**Light gun** (Duck Hunt, Hogan's Alley, Wild Gunman): on port 2 for the channel that holds a
+gun set, from its cart header. The mouse, player 1's left analog stick (absolute, past a small
+dead zone) and d-pad (two pixels a frame) all aim; the mouse's left button or A fires.
+*Input Options > Stick* picks Auto (a stick pushed fully over moves as the d-pad), Aim or
+D-pad. *Crosshair* marks the aim on the game picture, on both outputs, only while a gun set
+runs. These options show only when a gun set is loaded. Light sensing is NES_MiSTer's Zapper's.
+
 ## Status
 
 Known issues:
 
-- **Light-gun games** (Duck Hunt, Hogan's Alley, Wild Gunman) are not wired to a gun yet.
 - **All sets have not been tested** (see [Supported](#supported)); boards A and C use
   NES mappers with wider address decodes than MAME's (`docs/HACKS.md`).
-- **NES-only OSD entries remain** (peripherals, cheats, savestates): they come with NES_MiSTer and
-  are not yet hidden or adapted.
+- **Savestates and cheats** in the OSD are NES_MiSTer's and cover the NES side only.
 
 `docs/MAME_KLUDGES.md` lists what is taken from MAME as behaviour and what is known not to be
 right. `docs/HACKS.md` lists this core's own approximations. `docs/ROADMAP.md` is the plan and its
@@ -232,14 +243,17 @@ progress; `docs/LESSONS_LEARNED.md` is what it cost.
 * DIP switches from the `.mra` (`DIP;` in the OSD): done. The two 6-bit switches are split in two,
   as MiSTer allows at most 32 settings a switch
 * Inputs: done, two players, the BIOS buttons, and MAME's keys
-* CRT Adjust (H-Position, V-Shift, H-Size, V-Size): not yet
+* CRT Adjust (H-Position, V-Shift, H-Size; no V-Size), Audio & Video page: in, not yet checked on
+  the board
 * HDMI scaling (integer scale, crop, crop offset): NES_MiSTer's options, not checked here
 * HDMI rotation (orientation): the stacked monitors turned CW or CCW; one picture turned, not yet
 * Flip screen, HDMI and analog, from the OSD or the DIP (fake DIP where the game has none): not yet
 * HDMI-only options hidden under direct video: not yet
-* Peripheral menus shown only for games that use them: not yet
+* Peripheral menus shown only for games that use them: done, the gun options; NES_MiSTer's
+  System Type, Multitap, peripherals, Famicom keyboard and disk options are removed
 * Rotary joysticks (Ikari Warriors controls, GRS keystroke mode), where used: n/a
-* Light guns: mouse, analog stick and synthetic crosshair, where used: not yet
+* Light guns: mouse, analog stick and d-pad, crosshair. Duck Hunt plays on the board
+  (`debug/hw/gun/`)
 * Audio mix (Mono, None, 25%, 50%): n/a, the board is mono
 * Hiscore saving (`hiscore.v`, with autosave): not yet
 * NVRAM / EEPROM saved to the `.nvm` file: not yet checked (Punch-Out!!'s battery RAM)
@@ -251,23 +265,25 @@ progress; `docs/LESSONS_LEARNED.md` is what it cost.
 
 ### Todo
 
-- [ ] Light guns for Duck Hunt, Hogan's Alley and Wild Gunman
-- [ ] Pause, flip screen, CRT Adjust, hiscore
-- [ ] Hide or adapt NES_MiSTer's NES-only OSD entries
+- [x] Light guns for Duck Hunt, Hogan's Alley and Wild Gunman
+- [ ] Play Hogan's Alley and Wild Gunman on the board
+- [ ] Check CRT Adjust on an analog monitor
+- [ ] Pause, flip screen, hiscore
+- [x] Hide NES_MiSTer's NES-only OSD entries
 - [ ] Per-game button names
 - [ ] Sound against MAME, by ear
 - [ ] First release
 
 ### Resource usage
 
-`22e84c0`, release revision, on the DE10-nano's Cyclone V 5CSEBA6, speed grade 7, every clock
-meeting timing (worst `clk_sys` setup slack +1.609 ns):
+`845aeaf`, release revision, fitter seed default, on the DE10-nano's Cyclone V 5CSEBA6, speed
+grade 7, every clock meeting timing (worst `clk_sys` setup slack +1.398 ns):
 
 | resource | used | available |
 | --- | --- | --- |
-| Logic (ALMs) | 34,905 | 41,910 |
-| Block memory bits | 1,776,356 | 5,662,720 |
-| RAM blocks | 248 | 553 |
+| Logic (ALMs) | 34,974 | 41,910 |
+| Block memory bits | 1,800,932 | 5,662,720 |
+| RAM blocks | 251 | 553 |
 | DSP blocks | 47 | 112 |
 | PLLs | 3 | 6 |
 

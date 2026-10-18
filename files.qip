@@ -43,7 +43,10 @@ set_global_assignment -name SYSTEMVERILOG_FILE rtl/bios/rp5h01.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/bios/pc10_bios.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/bios/pc10_bios_video.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/mame_keys.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/pc10_gun.sv
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/video/pc10_fb.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/video/pc10_crt_chain.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/video/crt/crt_adjust.sv
 
 set_global_assignment -name SDC_FILE PlayChoice10.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE PlayChoice10.sv

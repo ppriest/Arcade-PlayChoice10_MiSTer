@@ -58,6 +58,15 @@ board with MAME's colours; sound is not yet judged, and the 60 Hz question is op
 - All 56 sets have an `.mra` (`build_mra.py --all`, all validating, setname `playch10` so the
   core has one CFG); board C (The Goonies) is mapper 87. Build `9256699`+: +1.943 ns, 83% ALMs,
   42% DSP after the composite path and the scaler's adaptive filter went (timing).
+- Phase 4, part: build `0715d37` (+2.063 ns, 84% ALMs, 251 M10K) gives the gun sets an NES 2.0
+  header with expansion device 0x08, which turns NES_MiSTer's Zapper on for their channel, its
+  trigger masked by CNTRLMASK (`pc10_in1_r`); CRT Adjust on the analog path; NES_MiSTer's
+  NES-only OSD entries removed. Deployed, not checked on the board.
+- `28cd4c0` (+1.912 ns, 83% ALMs, 251 M10K, deployed): `rtl/pc10_gun.sv` aims the gun in place of the Zapper's aim (its light sensing and
+  trigger timing kept): the mouse, the left stick and the d-pad together; a crosshair on both
+  outputs, only while a gun set runs. On the board (build `28cd4c0`), Duck Hunt starts, the
+  crosshair draws and follows the aim, and ducks are hit; the user played it and reports it works well (`debug/hw/gun/s1.png`, `s3.png`:
+  score 1,000 then 2,000). `sim/pc10_gun_tb`: 20 checks pass.
 - Open in Phase 2: sound, by ear (the APU is NES_MiSTer's; SOUNDMASK mutes it).
 - Phase 1, `rtl/bios/`: the Z80 (T80 from BallySente), map, LS259 latches, NMI and watchdog,
   INT DETECT, RP5H01, and the BIOS display. `sim/bios_boot_tb` from reset on pc_smb: 8,393,343 Z80

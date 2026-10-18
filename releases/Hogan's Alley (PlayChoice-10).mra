@@ -30,8 +30,8 @@
 	</rom>
 	<rom index="1" zip="pc_hgaly.zip|playch10.zip" md5="None">
 		<!-- channel 1's cart -->
-		<!-- pc_hgaly: iNES header, mapper 0, PRG 16 KB, CHR 8 KB, vertical -->
-		<part>4E 45 53 1A 01 01 01 00 00 00 00 00 00 00 00 00</part>
+		<!-- pc_hgaly: NES 2.0 header, mapper 0, PRG 16 KB, CHR 8 KB, vertical, Zapper -->
+		<part>4E 45 53 1A 01 01 01 08 00 00 00 00 00 00 00 08</part>
 		<part crc="8963ae6e" name="ha-u1"/>
 		<part crc="5df42fc4" name="ha-u2"/>
 	</rom>

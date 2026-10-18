@@ -84,10 +84,14 @@ def region(machine, name):
     return out, end
 
 
-def ines_header(mapper, prg_len, chr_len, vertical, four_screen, battery):
+def ines_header(mapper, prg_len, chr_len, vertical, four_screen, battery, gun=False):
+    """iNES; a gun set's is NES 2.0 with default expansion device 0x08, the Zapper on $4017,
+    which turns the core's gun on for its channel (PlayChoice10.sv, pc10_gun). Bytes 8-14 stay
+    zero: mapper high bits, sizes, no PRG RAM and NTSC, as iNES gives these boards."""
     f6 = ((mapper & 0x0F) << 4) | (8 if four_screen else 0) | (2 if battery else 0) | (1 if vertical else 0)
-    f7 = mapper & 0xF0
-    return bytes([0x4E, 0x45, 0x53, 0x1A, prg_len // 0x4000, chr_len // 0x2000, f6, f7] + [0] * 8)
+    f7 = (mapper & 0xF0) | (0x08 if gun else 0)
+    return bytes([0x4E, 0x45, 0x53, 0x1A, prg_len // 0x4000, chr_len // 0x2000, f6, f7] + [0] * 7
+                 + [0x08 if gun else 0])
 
 
 def hexbytes(b):
@@ -171,10 +175,12 @@ def cart_image(name, g, m):
         raise SystemExit(f"{name}: board {g['config']} says CHR RAM={chr_ram}, gfx2 is {chr_len} bytes")
     vertical = g["init"] != "init_pc_hrz"
     four = g["init"] == "init_pcgboard_type2"
-    hdr = ines_header(mapper, prg_len, chr_len, vertical, four, battery)
-    return ([f"\t\t<!-- {name}: iNES header, mapper {mapper}, PRG {prg_len // 1024} KB, CHR "
-             f"{'RAM' if chr_ram else str(chr_len // 1024) + ' KB'}, "
-             f"{'four-screen' if four else 'vertical' if vertical else 'horizontal'} -->",
+    gun = g["init"] == "init_pc_gun"
+    hdr = ines_header(mapper, prg_len, chr_len, vertical, four, battery, gun)
+    return ([f"\t\t<!-- {name}: {'NES 2.0' if gun else 'iNES'} header, mapper {mapper}, PRG "
+             f"{prg_len // 1024} KB, CHR {'RAM' if chr_ram else str(chr_len // 1024) + ' KB'}, "
+             f"{'four-screen' if four else 'vertical' if vertical else 'horizontal'}"
+             f"{', Zapper' if gun else ''} -->",
              f"\t\t<part>{hexbytes(hdr)}</part>"] + [part(r) for r in prg + chrr])
 
 

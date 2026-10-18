@@ -30,8 +30,8 @@
 	</rom>
 	<rom index="1" zip="pc_duckh.zip|playch10.zip" md5="None">
 		<!-- channel 1's cart -->
-		<!-- pc_duckh: iNES header, mapper 0, PRG 16 KB, CHR 8 KB, vertical -->
-		<part>4E 45 53 1A 01 01 01 00 00 00 00 00 00 00 00 00</part>
+		<!-- pc_duckh: NES 2.0 header, mapper 0, PRG 16 KB, CHR 8 KB, vertical, Zapper -->
+		<part>4E 45 53 1A 01 01 01 08 00 00 00 00 00 00 00 08</part>
 		<part crc="90ca616d" name="u1"/>
 		<part crc="4e049e03" name="u2"/>
 	</rom>

@@ -83,8 +83,6 @@ end
 parameter CONF_STR = {
 	"PlayChoice10;SS3E000000:200000,UART31250,MIDI;",
 	"-;",
-	"O[72:70],System Type,Auto,NTSC,PAL,Dendy,Vs.;",
-	"-;",
 	"C,Cheats;",
 	"H2OK,Cheats Enabled,On,Off;",
 	"-;",
@@ -115,21 +113,23 @@ parameter CONF_STR = {
 	"HBP1O[104:102],Screen (HDMI),Stacked,As CRT,Side by side,Rotated CW,Rotated CCW;",
 	"P1O[105],BIOS (reset),Dual monitor,Single monitor;",
 	"P1-;",
+	// the analog output (rtl/video/pc10_crt_chain.sv); HD: the settings, shown while On
+	"P1O[106],CRT Adjust,Off,On;",
+	"HDP1O[113:107],CRT H-Position,0,+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,+16,+17,+18,+19,+20,+21,+22,+23,+24,+25,+26,+27,+28,+29,+30,+31,+32,+33,+34,+35,+36,+37,+38,+39,+40,+41,+42,+43,+44,+45,+46,+47,+48,-48,-47,-46,-45,-44,-43,-42,-41,-40,-39,-38,-37,-36,-35,-34,-33,-32,-31,-30,-29,-28,-27,-26,-25,-24,-23,-22,-21,-20,-19,-18,-17,-16,-15,-14,-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1;",
+	"HDP1O[119:114],CRT V-Shift,0,+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,+16,+17,+18,+19,+20,+21,+22,+23,+24,+25,+26,+27,+28,+29,+30,+31,-32,-31,-30,-29,-28,-27,-26,-25,-24,-23,-22,-21,-20,-19,-18,-17,-16,-15,-14,-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1;",
+	"HDP1O[124:120],CRT H-Size,0,+1,+2,+3,+4,+5,+6,+7,+8,+9,+10,+11,+12,+13,+14,+15,-16,-15,-14,-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1;",
+	"P1-;",
 	"P1OUV,Audio Enable,Both,Internal,Cart Expansion,None;",
 	"P2,Input Options;",
 	"P2-;",
 	"P2O9,Swap Joysticks,No,Yes;",
-	"P2OA,Multitap,Disabled,Enabled;",
-	"P2oJK,SNAC,Off,Controllers,Zapper,3D Glasses;",
-	"P2o02,Peripheral,None,Zapper(Mouse),Zapper(Joy1),Zapper(Joy2),Vaus,Vaus(A-Trigger),Powerpad,Family Trainer;",
-	"P2oL,Famicom Keyboard,No,Yes;",
-	"P2-;",
-	"P2OL,Zapper Trigger,Mouse,Joystick;",
-	"P2OM,Crosshairs,On,Off;",
+	"P2oJK,SNAC,Off,Controllers,Zapper;",
+	"HCP2-;",
+	// the gun (rtl/pc10_gun.sv), HC: shown when a gun set is loaded
+	"HCP2OM,Crosshair,On,Off;",
+	"HCP2O[33:32],Stick,Auto,Aim,D-pad;",
 	"P3,Miscellaneous;",
 	"P3-;",
-	"P3OG,Disk Swap,Auto,FDS button;",
-	"P3O[17],Disk Speed,Fast,Original;",
 	"P3o9,Pause when OSD is open,Off,On;",
 	"P4,Advanced;",
 	"P4-;",
@@ -195,6 +195,7 @@ wire  [7:0] bios_r, bios_g, bios_b;
 // DISPMASK (MAME's screen_update_playch10_single, playch10.cpp 573-591).
 wire        bios_disp_mask;
 wire        bios_single = status[105];
+reg   [9:0] slot_gun = 10'd0;             // channels holding a gun set: the OSD shows Light gun
 reg         single_game = 1'b0;
 wire        show_menu = bios_single ? !single_game :
                         status[101:100] == 2'd2 || (status[101:100] == 2'd0 && bios_disp_mask);
@@ -212,7 +213,7 @@ wire int_audio = ~status[31];
 
 // Auto detects the NES 2.0 console type before its timing-region field. Legacy
 // images can select Vs. explicitly from the menu.
-wire [2:0] system_type_select = status[72:70];
+wire [2:0] system_type_select = 3'd0;   // the PlayChoice-10 is NTSC: no System Type option
 wire       system_type_auto = (system_type_select == 3'd0) || (system_type_select > 3'd4);
 wire [1:0] auto_sys_type = (mapper_flags[44:43] == 2'd1) ? 2'd3 :  // Vs. System
                            (mapper_flags[37:36] == 2'd1) ? 2'd1 :  // PAL
@@ -235,7 +236,7 @@ wire [1:0] composite_set = status[82:81];
 wire use_composite = (composite_set != 2'd0) && composite_available;
 wire composite_premium = (composite_set == 2'd2);
 
-wire [15:0] status_menumask = {4'd0, bios_single, use_composite, ~composite_available, vs_menu_hidden, (rom_loaded && mapper_has_savestate), en216p,
+wire [15:0] status_menumask = {2'd0, ~status[106], ~|slot_gun, bios_single, use_composite, ~composite_available, vs_menu_hidden, (rom_loaded && mapper_has_savestate), en216p,
 	~status[50], ~raw_serial, (palette2_osd != 3'd5), ~gg_avail, bios_loaded, ~bk_ena};
 
 // Figure out file types
@@ -605,10 +606,8 @@ always_comb begin
 		// Periphery normally uses port 2. The Vs. gun is an eight-bit serial
 		// device on port 1 and is inserted on D0 above the cabinet I/O packer.
 		if (vs_zapper_en)       joypad1_data[0] = vs_zapper_data;
-		else if (lightgun_en)   joypad2_data[4:3] = {trigger,light};
+		else if (lightgun_en)   joypad2_data[4:3] = {trigger & ~(pc10_gun & bios_cntrl_mask), light};
 		if (paddle_en)          joypad2_data[4:1] = {joypad_d4[0], paddle_btn, 1'b0, joypad_d4[0]};
-		if (status[34:32] == 6) joypad2_data[4:3] = {joypad_d4[0], joypad_d3[0]};
-		if (status[34:32] == 7) joypad2_data[4:1] = ~famtr;
 		if (fkeyb)              joypad2_data[4:1] = key_out;
 	end
 end
@@ -617,7 +616,7 @@ wire mic = (mic_cnt < 8'd215) && mic_button;
 reg [7:0] mic_cnt;
 always @(posedge clk) mic_cnt <= (mic_cnt == 8'd250) ? 8'd0 : mic_cnt + 1'b1;
 
-wire fkeyb = status[53];
+wire fkeyb = 1'b0;   // no Famicom keyboard on the PlayChoice-10
 wire [3:0] key_out;
 keyboard fkey(
 	.clk(clk),
@@ -641,27 +640,19 @@ miraclepiano miracle(
 	.rxd(UART_RXD)
 );
 
-wire manual_lightgun_en = ~status[34] & |status[33:32];
-wire lightgun_en = manual_lightgun_en || vs_header_zapper;
-wire zapper_port_b = manual_lightgun_en && status[32];
-wire zapper_mode = manual_lightgun_en ? status[33] : 1'b1;
-wire zapper_trigger_mode = manual_lightgun_en ? status[21] : 1'b1;
+// The gun sets (MAME init_pc_gun) carry NES 2.0 expansion device 0x08, the Zapper on $4017
+// (build_mra.py): the gun is on port 2 only while such a channel runs. MAME masks its trigger
+// with CNTRLMASK (pc10_in1_r, 856-876).
+wire pc10_gun = default_expansion == 7'h08;
+wire lightgun_en = pc10_gun || vs_header_zapper;
 assign vs_zapper_en = vs_system && (extend_serial_d4 || (!raw_serial && lightgun_en));
 
-zapper zap (
-	.clk(clk),
-	.reset(reset_nes | ~lightgun_en),
-	.mode(zapper_mode),
-	.trigger_mode(zapper_trigger_mode),
-	.ps2_mouse(ps2_mouse),
-	.analog(zapper_port_b ? joy_analog1 : joy_analog0),
-	.analog_trigger(zapper_port_b ? joyB[10] : joyA[10]),
-	.cycle(cycle),
-	.scanline(scanline),
-	.color(color),
-	.reticle(reticle),
-	.light(light),
-	.trigger(trigger)
+pc10_gun u_gun (
+	.clk(clk), .reset(reset_nes | ~lightgun_en),
+	.joy(joyA[11:0]), .ana(joy_analog0), .mouse(ps2_mouse),
+	.mode(status[33:32]), .show(~status[22]),
+	.cycle(cycle), .scanline(scanline), .color(color),
+	.light(light), .trigger(trigger), .reticle(reticle)
 );
 
 vs_zapper_serializer vs_zapper (
@@ -692,7 +683,7 @@ localparam [7:0] paddle_off = 32; //middle point for Chase HQ
 
 wire [7:0] paddle_adj = paddle_off + ((paddle < 40) ? 8'd40 : (paddle > 216) ? 8'd216 : paddle);
 wire [7:0] paddle_nes = ~{paddle_adj[0],paddle_adj[1],paddle_adj[2],paddle_adj[3],paddle_adj[4],paddle_adj[5],paddle_adj[6],paddle_adj[7]};
-wire       paddle_en  = (status[34:33] == 2);
+wire       paddle_en  = 1'b0;   // no Arkanoid controller on the PlayChoice-10
 wire       paddle_atr = paddle_en & status[32];
 wire       paddle_btn = paddle_atr ? (joyA[4] | joyB[4] | joyC[4] | joyD[4]) : (joyA[10] | joyB[10] | joyC[10] | joyD[10]);
 
@@ -706,8 +697,8 @@ always @(posedge clk) begin
 	end else begin
 		if (joypad_out[0]) begin
 			joypad_bits  <= piano ? {15'h0000, uart_data[8:0]}
-				: {status[10] ? {8'h08, nes_joy_C} : 16'hFFFF, joy_swap ? nes_joy_B : nes_joy_A};
-			joypad_bits2 <= {status[10] ? {8'h04, nes_joy_D} : 16'hFFFF, joy_swap ? nes_joy_A : nes_joy_B};
+				: {16'hFFFF, joy_swap ? nes_joy_B : nes_joy_A};
+			joypad_bits2 <= {16'hFFFF, joy_swap ? nes_joy_A : nes_joy_B};
 			joypad_d4 <= paddle_en ? paddle_nes : {4'b1111, powerpad[7], powerpad[11], powerpad[2], powerpad[3]};
 			joypad_d3 <= {powerpad[6], powerpad[10], powerpad[9], powerpad[5], powerpad[8], powerpad[4], powerpad[0], powerpad[1]};
 		end
@@ -781,6 +772,7 @@ always @(posedge clk) begin
 		slot_prgm[load_slot]  <= ld_prg_mask;
 		slot_chrm[load_slot]  <= ld_chr_mask;
 		slot_ok[load_slot]    <= 1'b1;
+		slot_gun[load_slot]   <= loader_flags[59:53] == 7'h08;
 	end
 	mapper_flags <= slot_ok[act_slot] ? slot_flags[act_slot] : 64'd0;
 	prg_mask     <= slot_prgm[act_slot];
@@ -1224,7 +1216,7 @@ video video
 	.load_color_data(pal_color),
 	.load_color_index(pal_index),
 	.emphasis(emphasis),
-	.reticle(~status[22] ? reticle : 2'b00),
+	.reticle(reticle),
 	.pal_video(pal_video)
 );
 
@@ -1369,17 +1361,38 @@ pc10_fb u_fb (
 	.DDRAM_BE(fb_DDRAM_BE), .DDRAM_WE(fb_DDRAM_WE)
 );
 
+// CRT Adjust (rmonic79's, glued as in Arcade-KonamiGX_MiSTer): the OSD stores list indices;
+// H-Position's 97 entries wrap at 97, V-Shift and H-Size are plain two's complement. H-Size is
+// held at 0 while the scandoubler or HQ2x is on. HDMI's "As CRT" follows it.
+wire              crt_on      = status[106];
+wire              crt_scale   = ~(forced_scandoubler | |scale);
+wire        [6:0] crt_hpos_ix = status[113:107];
+wire signed [8:0] crt_hoffset = crt_hpos_ix <= 7'd48 ? $signed({ 2'b00, crt_hpos_ix })
+                                                     : $signed({ 2'b00, crt_hpos_ix }) - 9'sd97;
+wire       crt_ce, crt_hs, crt_vs, crt_hb, crt_vb;
+wire [7:0] crt_r, crt_g, crt_b;
+
+pc10_crt_chain u_crt (
+	.clk(clk), .ce_pix(ce_pix),
+	.active(crt_on), .scale_en(crt_scale),
+	.hoffset(crt_hoffset), .voffset($signed(status[119:114])), .hsize($signed(status[124:120])),
+	.r_in(show_menu ? bios_r : R), .g_in(show_menu ? bios_g : G), .b_in(show_menu ? bios_b : B),
+	.hs_in(HSync), .vs_in(VSync), .hb_in(HBlank), .vb_in(VBlank),
+	.ce_out(crt_ce), .r_out(crt_r), .g_out(crt_g), .b_out(crt_b),
+	.hs_out(crt_hs), .vs_out(crt_vs), .hb_out(crt_hb), .vb_out(crt_vb)
+);
+
 video_mixer #(.LINE_LENGTH(260), .HALF_DEPTH(0), .GAMMA(1)) video_mixer
 (
 	.*,
-	.ce_pix(use_composite ? comp_pix : ce_pix),
-	.R(use_composite ? comp_r : show_menu ? bios_r : R),
-	.G(use_composite ? comp_g : show_menu ? bios_g : G),
-	.B(use_composite ? comp_b : show_menu ? bios_b : B),
-	.HSync(use_composite ? comp_hs : HSync),
-	.VSync(use_composite ? comp_vs : VSync),
-	.HBlank(use_composite ? comp_hb_c : HBlank),
-	.VBlank(use_composite ? comp_vb_c : VBlank),
+	.ce_pix(use_composite ? comp_pix : crt_ce),
+	.R(use_composite ? comp_r : crt_r),
+	.G(use_composite ? comp_g : crt_g),
+	.B(use_composite ? comp_b : crt_b),
+	.HSync(use_composite ? comp_hs : crt_hs),
+	.VSync(use_composite ? comp_vs : crt_vs),
+	.HBlank(use_composite ? comp_hb_c : crt_hb),
+	.VBlank(use_composite ? comp_vb_c : crt_vb),
 	.freeze_sync(),
 	.VGA_DE(vga_de),
 	.hq2x(scale==1 && !use_composite),
