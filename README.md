@@ -7,6 +7,7 @@ with Quartus Prime 17.0.2 Lite for the DE10-nano. This is an extension of
 ## Contents
 
 - [History](#history)
+- [Screenshots](#screenshots)
 - [Games](#games)
   - [Supported](#supported)
   - [Cabinets: several games in one .mra](#cabinets-several-games-in-one-mra)
@@ -14,7 +15,6 @@ with Quartus Prime 17.0.2 Lite for the DE10-nano. This is an extension of
   - [Video timing](#video-timing)
   - [Two monitors](#two-monitors)
   - [Floorplan](#floorplan)
-- [Screenshots](#screenshots)
 - [Installation](#installation)
 - [Controls](#controls)
 - [Status](#status)
@@ -33,6 +33,35 @@ with Quartus Prime 17.0.2 Lite for the DE10-nano. This is an extension of
   fitter seed default, every clock met, worst `clk_sys` setup slack +1.609 ns). All 56 sets have
   an `.mra`; Super Mario Bros., Super Mario Bros. 3, Metroid and The Goonies have run on the
   board, and a three-game cabinet.
+
+## Screenshots
+
+**On a cabinet**, both monitors stacked on an upright screen
+
+![PlayChoice-10 core on an upright cabinet screen](docs/screenshots/onscreen.jpg)
+
+The rest are native frames from a DE10-nano.
+
+**The BIOS menu** of a ten-channel cabinet
+
+![playch10 menu, ten channels](docs/screenshots/playch10/20261018_192753-screen.png)
+
+**Super Mario Bros.**
+
+![pc_smb title](docs/screenshots/pc_smb/title.png)
+
+**Super Mario Bros. 3**
+
+![pc_smb3 map](docs/screenshots/pc_smb3/map.png)
+
+**Teenage Mutant Ninja Turtles**
+
+![pc_tmnt area 1 information](docs/screenshots/pc_tmnt/20261018_192700-screen.png)
+![pc_tmnt overworld](docs/screenshots/pc_tmnt/20261018_192709-screen.png)
+
+**The Goonies**
+
+![pc_goons title](docs/screenshots/pc_goons/title.png)
 
 ## Games
 
@@ -154,10 +183,6 @@ combinational cells, two per ALM.
 ![Floorplan of PlayChoice10](docs/floorplan/PlayChoice10.png)
 
 `22e84c0`, fitted Oct 18 2026; per-block counts in `docs/floorplan/PlayChoice10_groups.md`.
-
-## Screenshots
-
-Native frames from a DE10-nano.
 
 ## Installation
 
