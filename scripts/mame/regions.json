@@ -1,57 +1,71 @@
 {
-  "_comment": "Core-specific. The main CPU's view of the machine, from the MAME driver's address map. Read by mame_capture.py and write_timing.py. Addresses are hex strings, inclusive.",
+  "_comment": "Core-specific. The BIOS Z80's view of the machine, from playch10.cpp bios_map/bios_io_map (lines 1479-1499). The cart RP2A03 is ':cart' in MAME; its map is the NES map. Read by mame_capture.py and write_timing.py. Addresses are hex strings, inclusive.",
   "cpu": ":maincpu",
+  "screen": ":top",
   "space": "program",
-  "bus_bytes": 2,
-  "big_endian": true,
+  "bus_bytes": 1,
+  "big_endian": false,
   "read": {
-    "workram": [
-      "0x000000",
-      "0x00ffff"
+    "ram_8v": [
+      "0x8000",
+      "0x87ff"
+    ],
+    "ram_8w": [
+      "0x8800",
+      "0x8fff"
+    ],
+    "videoram": [
+      "0x9000",
+      "0x97ff"
     ]
   },
   "wtap": {
-    "vregs": [
-      "0x000000",
-      "0x00001f"
+    "videoram": [
+      "0x9000",
+      "0x97ff"
     ]
   },
   "sweep": [
-    "workram",
-    "vregs"
+    "videoram"
   ],
   "trace": {
-    "addr_hi": "0xffffff",
+    "addr_hi": "0xffff",
+    "io_space": "io",
+    "io_hi": "0xff",
     "io": [
-      "0x000000",
-      "0x000000"
+      "0xe000",
+      "0xffff"
     ],
     "vectors": [
-      "0x000000",
-      "0x000000"
+      "0x0000",
+      "0x0000"
     ],
     "ipl": {
-      "reg": "SR",
-      "shift": 8,
-      "mask": 7
+      "reg": "IFF1",
+      "shift": 0,
+      "mask": 1
     },
     "rom": [
       [
-        "0x000000",
-        "0x0fffff"
+        "0x0000",
+        "0x3fff"
+      ],
+      [
+        "0xc000",
+        "0xdfff"
       ]
     ],
     "ram": [
       [
-        "0x100000",
-        "0x10ffff"
+        "0x8000",
+        "0x97ff"
       ]
     ]
   },
   "inputs": {
     "coin": "Coin 1",
-    "start": "1 Player Start",
+    "start": "Enter",
     "hold": "P1 Right",
-    "pulse": "P1 Button 1"
+    "pulse": "Start"
   }
 }

@@ -1,5 +1,49 @@
-set_global_assignment -name VERILOG_FILE rtl/lfsr.v
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/cos.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/mycore.v
+# NES_MiSTer 49a0a66 (rtl/nes/PROVENANCE.md). Local changes: video.sv's .mif path, nes.v's
+# BIOS control ports.
+set_global_assignment -name QIP_FILE rtl/nes/t65/t65.qip
+set_global_assignment -name QIP_FILE rtl/nes/mappers/mappers.qip
+set_global_assignment -name QIP_FILE rtl/nes/SOUND/OPLL/OPLL.qip
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/sdram.sv
+set_global_assignment -name VHDL_FILE rtl/nes/dpram.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/ddram.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/EEPROM_24C0x.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/cheatcodes.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/miracle.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/keyboard.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/zapper.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/cart.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/video.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/composite_decoder.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/composite_board.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/composite_crop.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/ppu.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/apu.sv
+set_global_assignment -name VHDL_FILE rtl/nes/bus_savestates.vhd
+set_global_assignment -name VHDL_FILE rtl/nes/statemanager.vhd
+set_global_assignment -name VHDL_FILE rtl/nes/savestates.vhd
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/regs_savestates.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/nes/savestate_ui.sv
+set_global_assignment -name VERILOG_FILE rtl/nes/nes.v
+set_global_assignment -name VERILOG_FILE rtl/nes/dsp.v
+set_global_assignment -name VERILOG_FILE rtl/nes/compat.v
+
+# rtl/pll.qip (NES_MiSTer's PLL: 85.909088 / 42.954544 / 21.477272 MHz, ROADMAP Clocks)
+# comes in through sys/pll_q17.qip. Regenerate rather than hand-edit.
+
+# T80 (Z80), from BallySente -- rtl/cpu/t80/PROVENANCE.md
+set_global_assignment -name VHDL_FILE rtl/cpu/t80/T80_Pack.vhd
+set_global_assignment -name VHDL_FILE rtl/cpu/t80/T80_MCode.vhd
+set_global_assignment -name VHDL_FILE rtl/cpu/t80/T80_ALU.vhd
+set_global_assignment -name VHDL_FILE rtl/cpu/t80/T80_Reg.vhd
+set_global_assignment -name VHDL_FILE rtl/cpu/t80/T80.vhd
+set_global_assignment -name VHDL_FILE rtl/cpu/t80/T80se.vhd
+
+# The PlayChoice-10 BIOS board, ours
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/bios/rp5h01.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/bios/pc10_bios.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/bios/pc10_bios_video.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/mame_keys.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/video/pc10_fb.sv
+
 set_global_assignment -name SDC_FILE PlayChoice10.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE PlayChoice10.sv

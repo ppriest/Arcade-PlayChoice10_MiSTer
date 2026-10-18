@@ -81,7 +81,7 @@ end
 
 -- Run a few frames, then exit through machine:exit() so MAME saves the cfg.
 -- Killing the process here would leave nothing written at all.
-local scr = mach.screens[":screen"]
+local scr = mach.screens[os.getenv("CORE_SCREEN") or ":screen"]
 emu.add_machine_frame_notifier(function()
     if scr:frame_number() > 5 then
         print("SEED     cfg written, exiting")

@@ -1204,6 +1204,30 @@ ack address that is also an input port must acknowledge on writes only.
   memory dumped as it is on x86. A bench loading it big-endian ran identically to MAME for 700
   frames until the game's first settings read.
 
+- **[PlayChoice10] A screen declared with `set_refresh_hz` and no vblank time has its vblank at
+  the END of the frame, not after the visible area.** A boot bench drove the Z80's vblank NMI at
+  line 240 of 262 (the visible area's end) and diverged at the first NMI. MAME's debugger trace
+  with `totalcycles` showed all 81 NMIs taken 5,608-5,621 Z80 cycles after line 240, i.e. at the
+  frame boundary: MAME's vblank period defaults to zero and sits at the frame's end. Read the
+  screen config for `set_vblank_time` or `set_raw` before deciding where a vblank interrupt is;
+  measure it from the debugger trace rather than inferring it.
+- **[PlayChoice10] For a cycle-exact boot match, MAME's interrupt lands at its scheduler's
+  instruction boundary, not at the event's exact time.** With the vblank edge computed exactly, the
+  NMI was still taken one instruction away from MAME's in four of the first 15 frames. MAME runs
+  the CPU in whole cycles up to the timer and checks the interrupt before the next instruction:
+  measured, it is taken at the first instruction boundary at or after one cycle before the event
+  (+7.3, 0, -0.3, -1 cycles on four frames). The bench reproduces that rule from the CPU's own
+  T-state count; from simulated time it drifted (a ps-rounded clock is 17 ppm off).
+- **[PlayChoice10] MAME's debugger can log cycles headless.** `-debug -debugger none` plus a Lua
+  autoboot script calling `manager.machine.debugger:command('trace <file>,maincpu,noloop,{tracelog
+  "%d ",totalcycles}')` writes every instruction with its cycle count (`noloop`: without it repeated
+  loops are collapsed). The Lua device object has no cycle counter (`state` lacks it,
+  `total_cycles` is nil). `scripts/compare_cycles.py` diffs it against the bench's opcode fetches.
+- **[PlayChoice10] T80 makes an opcode read during the NMI acknowledge cycle; MAME's Z80 does not.**
+  A real Z80 reads the opcode at PC in the NMI's M1 and discards it. MAME's bus tap never sees it,
+  so a bus-trace bench must leave it out (spy T80's `NMICycle`), or every NMI shows as a
+  divergence.
+
 ## Hardware bring-up (MiSTer / DE10-nano)
 
 - **The SDRAM pinout has an authoritative in-repo reference.** The `.qsf` does `source sys/sys.tcl`;

@@ -39,7 +39,8 @@ def trace_env(r):
             "CORE_IO": ",".join(f"{h(lo)}:{h(hi)}" for lo, hi in io),
             "CORE_VEC_LO": h(vec[0]), "CORE_VEC_HI": h(vec[1]),
             "CORE_IPL_REG": ipl.get("reg", ""), "CORE_IPL_SHIFT": str(ipl.get("shift", 0)),
-            "CORE_IPL_MASK": str(ipl.get("mask", 0))}
+            "CORE_IPL_MASK": str(ipl.get("mask", 0)),
+            "CORE_IO_SPACE": t.get("io_space", ""), "CORE_IO_HI": h(t.get("io_hi", "0xff"))}
 
 
 def run_traced(game, lua, out, env_extra, seconds):

@@ -71,7 +71,8 @@ def spec(table, names=None):
 
 def lua_env(r):
     return {"CORE_CPU": r["cpu"], "CORE_SPACE": r["space"],
-            "CORE_BYTES": str(r["bus_bytes"]), "CORE_BIG": "1" if r["big_endian"] else "0"}
+            "CORE_BYTES": str(r["bus_bytes"]), "CORE_BIG": "1" if r["big_endian"] else "0",
+            "CORE_SCREEN": r.get("screen", ":screen")}
 
 
 def lua_runner_env(lua):

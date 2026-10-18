@@ -7,6 +7,8 @@
     python scripts/hw.py run   "Game Title (set 1)"      # launch, then shot
     python scripts/hw.py playing                         # what is running
     python scripts/hw.py osd                             # toggle the OSD (forces an nvram save)
+    python scripts/hw.py key 5                           # tap a key (Linux keycode or a name in KEYS)
+    python scripts/hw.py cfg pc_smb 102:104=1 105=0      # set OSD status fields before a launch
 
 Needs MiSTer Remote (wizzomafizzo/mrext) listening on port 8182, and the same
 ./mister.env that scripts/deploy.py uses. The .mra folder is derived from the
@@ -182,10 +184,16 @@ def resolve_mra(m, name):
     sys.exit(f"no such .mra on the device: {name}")
 
 
+# Linux input keycodes for the MAME keys the PlayChoice-10 uses (PlayChoice10.sv, kb_a)
+KEYS = {"1": 2, "2": 3, "5": 6, "6": 7, "9": 10, "0": 11, "-": 12, "=": 13,
+        "up": 103, "down": 108, "left": 105, "right": 106, "lctrl": 29, "lalt": 56}
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("command", choices=("launch", "shot", "run", "playing", "osd"))
+    ap.add_argument("command", choices=("launch", "shot", "run", "playing", "osd", "key", "cfg"))
     ap.add_argument("mra", nargs="?", help=".mra name or absolute remote path")
+    ap.add_argument("fields", nargs="*", help="cfg: lo[:hi]=value status fields")
     ap.add_argument("--out", default=str(REPO / "debug" / "hw" / "shot.png"))
     ap.add_argument("--settle", type=float, default=4)
     ap.add_argument("--native", action="store_true",
@@ -208,6 +216,37 @@ def main():
         # save request (menu.cpp MENU_SAVE_CHECK).
         m.post("/controls/keyboard-raw/88")
         print("  OSD toggled")
+        return 0
+
+    if a.command == "cfg":
+        # Main_MiSTer loads <setname>.CFG, 16 bytes of status bits, little-endian, when the
+        # core starts (user_io.cpp, CORE_TYPE_8BIT): the next launch picks it up
+        remote = f"/media/fat/config/{a.mra}.CFG"
+        local = REPO / "debug" / f"{a.mra}.CFG"
+        have = "".join(m.sh(f"test -f {remote} && xxd -p {remote} || true", check=False).split())
+        status = int.from_bytes(bytes.fromhex(have), "little") if len(have) == 32 else 0
+        for f in a.fields:
+            k, v = f.split("=")
+            lo, hi = (int(x) for x in (k.split(":") + [k])[:2]) if ":" in k else (int(k), int(k))
+            if lo > hi:
+                lo, hi = hi, lo
+            mask = ((1 << (hi - lo + 1)) - 1) << lo
+            status = (status & ~mask) | ((int(v) << lo) & mask)
+        local.parent.mkdir(parents=True, exist_ok=True)
+        local.write_bytes(status.to_bytes(16, "little"))
+        p = subprocess.run([m.pscp, "-batch", "-pw", m.pw, str(local), f"{m.user}@{m.host}:{remote}"],
+                           capture_output=True, text=True, timeout=60)
+        if p.returncode:
+            sys.exit(f"upload failed: {p.stderr.strip()}")
+        print(f"  {remote}: status {status:#034x}")
+        return 0
+
+    if a.command == "key":
+        # the remote API's raw route sends a press and a release
+        code = KEYS.get(a.mra, None) if a.mra else None
+        code = code if code is not None else int(a.mra)
+        m.post(f"/controls/keyboard-raw/{code}")
+        print(f"  key {a.mra} (keycode {code})")
         return 0
 
     if a.command in ("launch", "run"):

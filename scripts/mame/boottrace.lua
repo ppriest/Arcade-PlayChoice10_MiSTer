@@ -64,8 +64,17 @@ _G.__core_trace_taps = {
     prog:install_read_tap(0, AHI, "rd", record("r")),
     prog:install_write_tap(0, AHI, "wr", record("w")),
 }
+-- CORE_IO_SPACE (regions.json trace.io_space): a second space, logged as "ir"/"iw"
+-- (a Z80's port space).
+local IOS = os.getenv("CORE_IO_SPACE") or ""
+if IOS ~= "" then
+    local iosp = mach.devices[os.getenv("CORE_CPU") or ":maincpu"].spaces[IOS]
+    local IOHI = tonumber(os.getenv("CORE_IO_HI") or "ff", 16)
+    table.insert(_G.__core_trace_taps, iosp:install_read_tap(0, IOHI, "ird", record("ir")))
+    table.insert(_G.__core_trace_taps, iosp:install_write_tap(0, IOHI, "iwr", record("iw")))
+end
 
 -- Backstop: a boot with fewer than N accesses still writes its file.
 _G.__core_trace_notifier = emu.add_machine_frame_notifier(function()
-    if mach.screens[":screen"]:frame_number() >= 600 then stop() end
+    if mach.screens[os.getenv("CORE_SCREEN") or ":screen"]:frame_number() >= 600 then stop() end
 end)

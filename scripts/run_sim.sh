@@ -81,17 +81,19 @@ fi
 #                           simulation rather than patched. Still synthesized.
 #   *_upstream_reference.*  pristine upstream copies kept beside the vendored
 #                           modules purely so local changes can be diffed.
+#   rtl/nes/                NES_MiSTer, vendored unchanged; same use-before-declare
+#                           (vlog-2388/2730). Benches that need the NES use Verilator.
 #   cos.sv, lfsr.v, mycore.v  Template_MiSTer's demo core. Excluded now, and to
 #                           be DELETED once <Name>.sv becomes the real top
 #                           level; the exclusions stay so a stray copy cannot
 #                           creep back in.
 RTL=$(find rtl -name '*.sv' \
-        -not -path 'rtl/synth_check/*' \
+        -not -path 'rtl/synth_check/*' -not -path 'rtl/nes/*' \
         -not -name 'screen_rotate*.sv' \
         -not -name '*_upstream_reference.sv' \
         -not -name 'cos.sv' | sort)
 VLOG=$(find rtl -name '*.v' \
-        -not -path 'rtl/synth_check/*' \
+        -not -path 'rtl/synth_check/*' -not -path 'rtl/nes/*' \
         -not -name 'pll*.v' \
         -not -name 'lfsr.v' -not -name 'mycore.v' \
         -not -name '*_upstream_reference.v' | sort)

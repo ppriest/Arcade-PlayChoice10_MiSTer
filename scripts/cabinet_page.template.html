@@ -1,0 +1,302 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later
+     Template for tools/cabinet_builder.html, filled by scripts/build_cabinet_page.py. Edit
+     here, not in the generated page. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlayChoice-10 Cabinet Builder</title>
+<style>
+/* A cabinet's channel strip: the game list on the left, the ten channels on the right. */
+:root {
+  --bg: #f4f2f0;
+  --panel: #ffffff;
+  --ink: #1d1b1a;
+  --muted: #6b6461;
+  --line: #ddd7d3;
+  --accent: #c8102e;        /* the cabinet's red */
+  --accent-ink: #ffffff;
+  --chan: #1d6b3a;          /* the BIOS menu's green */
+  --chan-ink: #ffffff;
+  --warn: #9a5b00;
+  --field: #fbfaf9;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  --sans: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161414;
+    --panel: #201d1d;
+    --ink: #ece7e4;
+    --muted: #a39b97;
+    --line: #3a3433;
+    --accent: #e0363f;
+    --accent-ink: #ffffff;
+    --chan: #2f8f52;
+    --chan-ink: #ffffff;
+    --warn: #e0a24a;
+    --field: #191717;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans);
+  padding: 20px max(16px, env(safe-area-inset-left, 0px)) 32px max(16px, env(safe-area-inset-right, 0px));
+}
+header { max-width: 1180px; margin: 0 auto 16px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+h1 { margin: 0; font-size: 22px; letter-spacing: 0.01em; text-wrap: balance; }
+h1 span { color: var(--accent); }
+header p { margin: 0; color: var(--muted); }
+main { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+h2 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+input[type=text], input[type=search] {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--field); color: var(--ink); font: inherit;
+}
+input:focus-visible, button:focus-visible, li:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button {
+  font: inherit; border: 1px solid var(--line); background: var(--field); color: var(--ink);
+  border-radius: 6px; padding: 4px 10px; cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); padding: 8px 16px; font-weight: 600; }
+ul { list-style: none; margin: 0; padding: 0; }
+#games { max-height: 62vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; }
+#games li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+#games li:last-child { border-bottom: 0; }
+#games li.used { opacity: 0.45; }
+.g-name { font-weight: 600; overflow-wrap: anywhere; }
+.g-meta { color: var(--muted); font-size: 12px; }
+.g-meta code, .chan code { font-family: var(--mono); font-size: 12px; }
+#channels li {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field);
+}
+#channels { display: flex; flex-direction: column; gap: 6px; }
+#channels li.dragging { opacity: 0.4; }
+#channels li.over { border-color: var(--accent); }
+.num {
+  width: 34px; height: 28px; display: grid; place-items: center; border-radius: 5px;
+  background: var(--chan); color: var(--chan-ink); font: 600 14px var(--mono);
+}
+#channels li:first-child .num { background: var(--accent); }
+.chan-actions { display: flex; gap: 4px; }
+.chan-actions button { padding: 2px 8px; }
+.empty { color: var(--muted); padding: 12px 4px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.note { color: var(--muted); font-size: 12px; margin: 0; }
+.warn { color: var(--warn); }
+#zips { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+details summary { cursor: pointer; color: var(--muted); }
+pre { margin: 8px 0 0; max-height: 40vh; overflow: auto; background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font: 12px/1.4 var(--mono); }
+@media (prefers-reduced-motion: no-preference) { button, #channels li { transition: border-color 120ms, opacity 120ms; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>PlayChoice-10 <span>Cabinet Builder</span></h1>
+  <p>Pick up to ten games, put them in channel order, download the <code>.mra</code>.</p>
+</header>
+<main>
+  <section aria-labelledby="h-games">
+    <h2 id="h-games"><span>Games</span><span id="count"></span></h2>
+    <input id="search" type="search" placeholder="Filter by name, maker, year or set" aria-label="Filter games">
+    <ul id="games"></ul>
+  </section>
+
+  <section aria-labelledby="h-chan">
+    <h2 id="h-chan"><span>Channels</span><span id="used"></span></h2>
+    <label for="title" class="note">Cabinet name (the menu entry, and the file name)</label>
+    <input id="title" type="text" value="PlayChoice-10 Best Of">
+    <ul id="channels" aria-live="polite"></ul>
+    <p class="note">Channel 1 also carries the BIOS. Drag to reorder, or use the arrows.</p>
+    <div class="row">
+      <button id="download" class="primary" type="button">Download .mra</button>
+      <button id="copy" type="button">Copy XML</button>
+      <button id="clear" type="button">Clear</button>
+      <span id="status" class="note" role="status"></span>
+    </div>
+    <div>
+      <p class="note">ROM zips this cabinet needs (MAME @MAMEVER@ sets, in <code>games/mame</code>):</p>
+      <p id="zips"></p>
+    </div>
+    <details>
+      <summary>Show the .mra</summary>
+      <pre id="xml"></pre>
+    </details>
+  </section>
+</main>
+
+<script id="data" type="application/json">/*DATA*/</script>
+<script>
+"use strict";
+// The .mra pieces come from scripts/build_mra.py (header, channel1, channel, footer), so a
+// cabinet made here is line for line the one `build_mra.py --cabinet` writes.
+const DATA = JSON.parse(document.getElementById("data").textContent);
+const MAX = 10;
+const games = DATA.games;
+const bySet = Object.fromEntries(games.map(g => [g.set, g]));
+let chans = [];
+
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("pc10-cabinet") || "null");
+    if (saved && Array.isArray(saved.sets)) {
+      chans = saved.sets.filter(s => bySet[s]).slice(0, MAX);
+      if (typeof saved.title === "string") $("title").value = saved.title;
+    }
+  } catch (e) { /* no storage: start empty */ }
+  if (!chans.length) chans = DATA.example.filter(s => bySet[s]);
+}
+function save() {
+  try { localStorage.setItem("pc10-cabinet", JSON.stringify({ sets: chans, title: $("title").value })); }
+  catch (e) { /* not kept between visits */ }
+}
+
+function buildMra() {
+  if (!chans.length) return "";
+  const first = bySet[chans[0]];
+  const title = $("title").value.trim() || "PlayChoice-10 Cabinet";
+  let lines = DATA.header
+    .replace("@TITLE@", esc(title)).replace("@YEAR@", first.year).replace("@MAKER@", first.maker)
+    .split("\n");
+  lines = lines.concat(first.ch1.split("\n"));
+  chans.slice(1).forEach((s, i) => {
+    const n = i + 2;
+    lines = lines.concat(bySet[s].chn.replace("@N@", String(n))
+      .replace("@CART@", String(15 + n)).replace("@INST@", String(31 + n)).split("\n"));
+  });
+  return lines.concat(DATA.footer.split("\n")).join("\n");
+}
+
+function fileName() {
+  const t = ($("title").value.trim() || "PlayChoice-10 Cabinet").replace(/[\\/:*?"<>|]/g, "-");
+  return t + ".mra";
+}
+
+function renderGames() {
+  const q = $("search").value.trim().toLowerCase();
+  const list = $("games");
+  list.textContent = "";
+  let shown = 0;
+  for (const g of games) {
+    const hay = (g.desc + " " + g.maker + " " + g.year + " " + g.set).toLowerCase();
+    if (q && !hay.includes(q)) continue;
+    shown++;
+    const li = document.createElement("li");
+    const used = chans.includes(g.set);
+    if (used) li.className = "used";
+    const info = document.createElement("div");
+    info.innerHTML = `<div class="g-name"></div><div class="g-meta"></div>`;
+    info.firstChild.textContent = g.name;
+    info.lastChild.innerHTML = `${g.year} &middot; ${esc(g.makerText)} &middot; <code>${g.set}</code>`;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = used ? "Added" : "Add";
+    b.disabled = used || chans.length >= MAX;
+    b.setAttribute("aria-label", `Add ${g.name}`);
+    b.onclick = () => { chans.push(g.set); update(); };
+    li.append(info, b);
+    list.append(li);
+  }
+  $("count").textContent = q ? `${shown} of ${games.length}` : `${games.length}`;
+}
+
+let dragFrom = -1;
+function renderChannels() {
+  const list = $("channels");
+  list.textContent = "";
+  if (!chans.length) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.style.display = "block";
+    li.textContent = "No games yet: add some from the list.";
+    list.append(li);
+  }
+  chans.forEach((s, i) => {
+    const g = bySet[s];
+    const li = document.createElement("li");
+    li.draggable = true;
+    li.innerHTML = `<span class="num">${i + 1}</span><div><div class="g-name"></div><div class="g-meta"><code>${s}</code></div></div><div class="chan-actions"></div>`;
+    li.querySelector(".g-name").textContent = g.name;
+    const acts = li.querySelector(".chan-actions");
+    const mk = (label, aria, fn, dis) => {
+      const b = document.createElement("button");
+      b.type = "button"; b.textContent = label; b.setAttribute("aria-label", aria);
+      b.disabled = !!dis; b.onclick = fn; acts.append(b);
+    };
+    mk("↑", `Move ${g.name} up`, () => { swap(i, i - 1); }, i === 0);
+    mk("↓", `Move ${g.name} down`, () => { swap(i, i + 1); }, i === chans.length - 1);
+    mk("✕", `Remove ${g.name}`, () => { chans.splice(i, 1); update(); });
+    li.addEventListener("dragstart", e => { dragFrom = i; li.classList.add("dragging"); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", s); });
+    li.addEventListener("dragend", () => { li.classList.remove("dragging"); });
+    li.addEventListener("dragover", e => { e.preventDefault(); li.classList.add("over"); });
+    li.addEventListener("dragleave", () => li.classList.remove("over"));
+    li.addEventListener("drop", e => {
+      e.preventDefault(); li.classList.remove("over");
+      if (dragFrom < 0 || dragFrom === i) return;
+      const [m] = chans.splice(dragFrom, 1);
+      chans.splice(i, 0, m); dragFrom = -1; update();
+    });
+    list.append(li);
+  });
+  $("used").textContent = `${chans.length} of ${MAX}`;
+}
+
+function swap(a, b) {
+  if (b < 0 || b >= chans.length) return;
+  [chans[a], chans[b]] = [chans[b], chans[a]];
+  update();
+}
+
+function update() {
+  renderGames();
+  renderChannels();
+  const xml = buildMra();
+  $("xml").textContent = xml;
+  const zips = new Set();
+  chans.forEach(s => bySet[s].zips.forEach(z => zips.add(z)));
+  $("zips").textContent = zips.size ? [...zips].join("  ") : "none yet";
+  $("download").disabled = $("copy").disabled = !chans.length;
+  $("status").textContent = "";
+  save();
+}
+
+$("search").addEventListener("input", renderGames);
+$("title").addEventListener("input", update);
+$("clear").onclick = () => { chans = []; update(); };
+$("download").onclick = () => {
+  const blob = new Blob([buildMra()], { type: "application/xml" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName();
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  $("status").textContent = `Saved ${fileName()}`;
+};
+$("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText(buildMra()); $("status").textContent = "Copied"; }
+  catch (e) {
+    const pre = $("xml"); pre.parentElement.open = true;
+    const r = document.createRange(); r.selectNodeContents(pre);
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    $("status").textContent = "Selected: press Ctrl+C";
+  }
+};
+
+window.pc10BuildMra = (sets, title) => { chans = sets.slice(0, MAX); $("title").value = title; update(); return buildMra(); };
+load();
+update();
+</script>
+</body>
+</html>

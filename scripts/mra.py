@@ -158,17 +158,17 @@ def interleave(parts, output_bits):
     return bytes(out)
 
 
-def build_image(mra_path, zip_path, size=None):
-    """Assemble the index-0 ROM image an .mra describes. zip_path: one path
-    or a list, in the order the .mra's zip attribute names them."""
+def build_image(mra_path, zip_path, size=None, index="0"):
+    """Assemble the ROM image an .mra describes for one ioctl index. zip_path: one
+    path or a list, in the order the .mra's zip attribute names them."""
     root = ET.parse(mra_path).getroot()
     rom0 = None
     for rom in root.findall("rom"):
-        if rom.get("index") == "0":
+        if rom.get("index") == index:
             rom0 = rom
             break
     if rom0 is None:
-        raise ValueError("no <rom index=\"0\"> in the .mra")
+        raise ValueError("no <rom index=\"%s\"> in the .mra" % index)
 
     out = bytearray()
     paths = zip_path if isinstance(zip_path, (list, tuple)) else [zip_path]

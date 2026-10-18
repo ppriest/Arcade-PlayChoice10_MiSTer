@@ -22,7 +22,7 @@ local COIN   = tonumber(os.getenv("WT_COIN") or "0")
 local mach = manager.machine
 local cpu  = mach.devices[os.getenv("CORE_CPU") or ":maincpu"]
 local prog = cpu.spaces[os.getenv("CORE_SPACE") or "program"]
-local scr  = mach.screens[":screen"]
+local scr  = mach.screens[os.getenv("CORE_SCREEN") or ":screen"]
 
 local function split(s, sep)
     local out = {}

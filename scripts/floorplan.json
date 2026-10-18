@@ -1,0 +1,16 @@
+{"groups": [
+  {"name": "BIOS Z80",              "match": "u_bios\\|u_z80",                         "color": "#e6194b"},
+  {"name": "BIOS display",          "match": "^emu\\|u_bios_video",                    "color": "#3cb44b"},
+  {"name": "BIOS ROM, RAM, RP5H01", "match": "^emu\\|u_bios(\\||$)",                   "color": "#911eb4"},
+  {"name": "NES CPU and DMA",       "match": "^emu\\|nes\\|(cpu|dma)",                 "color": "#f032e6"},
+  {"name": "NES APU",               "match": "^emu\\|nes\\|apu",                       "color": "#f58231"},
+  {"name": "NES PPU",               "match": "^emu\\|nes\\|ppu",                       "color": "#42d4f4"},
+  {"name": "NES mappers",           "match": "^emu\\|nes\\|multi_mapper",              "color": "#ffe119"},
+  {"name": "Game Genie codes",      "match": "^emu\\|nes\\|codes",                     "color": "#aaffc3"},
+  {"name": "NES other",             "match": "^emu\\|nes",                             "color": "#bfef45"},
+  {"name": "SDRAM + loader",        "match": "^emu\\|(sdram|loader)",                  "color": "#4363d8"},
+  {"name": "HDMI two monitors",     "match": "^emu\\|u_fb",                            "color": "#dcbeff"},
+  {"name": "Video mixer/scaler",    "match": "^emu\\|(video|video_mixer|video_freak)", "color": "#808000"},
+  {"name": "hps_io",                "match": "^emu\\|hps_io",                          "color": "#469990"},
+  {"name": "Core other",            "match": "^emu\\|",                                "color": "#9a6324"}
+]}

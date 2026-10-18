@@ -102,7 +102,7 @@ end
 local done = false
 core_subs[#core_subs + 1] = emu.add_machine_frame_notifier(guard("frame", function()
     if done then return end
-    local scr = m.screens[":screen"]
+    local scr = m.screens[os.getenv("CORE_SCREEN") or ":screen"]
     if scr:frame_number() < FRAME then return end
     done = true
 

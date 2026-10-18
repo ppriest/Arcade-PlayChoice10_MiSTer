@@ -41,6 +41,7 @@ from mame_capture import regions  # noqa: E402
 _T = regions().get("trace", {})
 ROM = [(int(lo, 16), int(hi, 16)) for lo, hi in _T.get("rom", [])]
 RAM = [(int(lo, 16), int(hi, 16)) for lo, hi in _T.get("ram", [])]
+IO_TAG = 1 << 24                        # "ir"/"iw" rows: port accesses, outside any memory range
 
 
 def load(path):
@@ -50,7 +51,10 @@ def load(path):
             continue
         seq, rw, a, m, d = ln.split()
         m = int(m, 16)
-        rows.append((int(seq), rw, int(a, 16), m, int(d, 16) & m))
+        a = int(a, 16)
+        if rw in ("ir", "iw"):          # a second space (a Z80's ports): kept apart by tag
+            rw, a = rw[1], a | IO_TAG
+        rows.append((int(seq), rw, a, m, int(d, 16) & m))
     return rows
 
 

@@ -1,0 +1,11 @@
+Z80 VRAM (0x9000-0x97FF) writes by scanline, MAME 0.289, pc_smb, scripts/write_timing.py
+(results in debug/wtiming/). 262 lines, vblank from line 240. 1800 frames counted.
+
+run                         writes/frame  in vblank
+dual BIOS, attract                  3.4      70.7%
+dual BIOS, play (coin 600)          0.1     100.0%
+single BIOS, attract                2.7      73.2%
+single BIOS, play                   0.0         -
+
+MAME drops VRAM writes unless SDCS is set, and SDCS blanks the BIOS display, so no
+accepted write lands on a displayed line: the display reads VRAM live, no snapshot.

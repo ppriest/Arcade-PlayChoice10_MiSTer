@@ -1,0 +1,1178 @@
+// Copyright (c) 2012-2013 Ludvig Strigeus
+// This program is GPL Licensed. See COPYING for the full license.
+
+// Sprite DMA Works as follows.
+// When the CPU writes to $4014 DMA is initiated ASAP.
+// DMA runs for 512 cycles, the first cycle it reads from address
+// xx00 - xxFF, into a latch, and the second cycle it writes to $2004.
+
+// Facts:
+// 1) Sprite DMA always does reads on even cycles and writes on odd cycles.
+// 2) There are 1-2 cycles of cpu_read=1 after cpu_read=0 until Sprite DMA starts (pause_cpu=1, aout_enable=0)
+// 3) Sprite DMA reads the address value on the last clock of cpu_read=0
+// 4) If DMC interrupts Sprite, then it runs on the even cycle, and the odd cycle will be idle (pause_cpu=1, aout_enable=0)
+// 5) When DMC triggers && interrupts CPU, there will be 2-3 cycles (pause_cpu=1, aout_enable=0) before DMC DMA starts.
+
+// https://wiki.nesdev.com/w/index.php/PPU_OAM
+// https://wiki.nesdev.com/w/index.php/APU_DMC
+// https://forums.nesdev.com/viewtopic.php?f=3&t=6100
+// https://forums.nesdev.com/viewtopic.php?f=3&t=14120
+
+module DmaController(
+	input clk,
+	input ce,
+	input reset,
+	input put_cycle,               // Current cycle even or odd?
+	input put_ce,                  // CE on a PUT cycle from APU
+	input get_ce,                  // CE on a GET cycle from APU
+	input sprite_trigger,          // Sprite DMA trigger?
+	input dmc_trigger,             // DMC DMA trigger?
+	input cpu_read,                // CPU is in a read cycle?
+	input [7:0] data_from_cpu,     // Data written by CPU?
+	input [7:0] dma_data_to_ram,   // Data read from RAM?
+	input [15:0] dmc_dma_addr,     // DMC DMA Address
+	output [15:0] aout,            // Address to access
+	output aout_enable,            // DMA controller wants bus control
+	output read,                   // 1 = read, 0 = write
+	output [7:0] data_to_ram,      // Value to write to RAM
+	output dmc_ack,                // ACK the DMC DMA
+	output pause_cpu               // CPU is paused
+);
+
+reg dmc_state;
+reg [1:0] spr_state;
+reg [7:0] sprite_dma_lastval;
+reg [15:0] sprite_dma_addr;     // sprite dma source addr
+wire [8:0] new_sprite_dma_addr = sprite_dma_addr[7:0] + 8'h01;
+
+always @(posedge clk) if (reset) begin
+	dmc_state <= 0;
+	spr_state <= 0;
+	sprite_dma_lastval <= 0;
+	sprite_dma_addr <= 0;
+end else if (ce) begin
+	if (dmc_state == 0 && dmc_trigger && cpu_read && put_ce) dmc_state <= 1;
+	if (dmc_state == 1 && put_ce) dmc_state <= 0;
+
+	if (sprite_trigger) begin sprite_dma_addr <= {data_from_cpu, 8'h00}; spr_state <= 1; end
+	if (spr_state == 1 && cpu_read && get_ce) spr_state <= 3;
+	if (spr_state[1] && put_ce && dmc_state == 1) spr_state <= 1;
+	if (spr_state[1] && get_ce) sprite_dma_addr[7:0] <= new_sprite_dma_addr[7:0];
+	if (spr_state[1] && get_ce && new_sprite_dma_addr[8]) spr_state <= 0;
+	if (spr_state[1]) sprite_dma_lastval <= dma_data_to_ram;
+end
+
+assign pause_cpu = (spr_state[0] || dmc_trigger || dmc_state == 1);
+assign dmc_ack   = (dmc_state == 1 && !put_cycle && dmc_trigger); // a DMC hardware bug can make trigger fall before it's done
+assign aout_enable = dmc_ack || spr_state[1];
+assign read = !put_cycle;
+assign data_to_ram = sprite_dma_lastval;
+assign aout = dmc_ack ? dmc_dma_addr : !put_cycle ? sprite_dma_addr : 16'h2004;
+
+endmodule
+
+module NES(
+	input         clk,
+	input         reset_nes,
+	input         ppu_rst_behavior,
+	input         cold_reset,
+	input         pausecore,
+	output        corepaused,
+	input   [1:0] sys_type,
+	input   [7:0] vs_dip_switches,
+	output  [1:0] nes_div,
+	input  [63:0] mapper_flags,
+	output [15:0] sample,         // sample generated from APU
+	output  [5:0] color,          // pixel generated from PPU
+	output  [1:0] joypad_clock,   // Set to 1 for each joypad to clock it.
+	output  [2:0] joypad_out,     // Set to 1 to strobe joypads. Then set to zero to keep the value.
+	input   [4:0] joypad1_data,   // Port1
+	input   [4:0] joypad2_data,   // Port2
+	input         fds_busy,       // FDS Disk Swap Busy
+	input         fds_eject,      // FDS Disk Swap Pause
+	input         fds_auto_eject,
+	input   [1:0] max_diskside,
+	input         fds_fast,
+	output  [1:0] diskside,
+
+	input   [4:0] audio_channels, // Enabled audio channels
+	input         ex_sprites,
+	input   [1:0] mask,
+	input 		  dejitter_timing,
+
+	// Access signals for the SDRAM.
+	output [24:0] cpumem_addr,
+	output        cpumem_read,
+	output        cpumem_write,
+	output  [7:0] cpumem_dout,
+	input   [7:0] cpumem_din,
+	output [21:0] ppumem_addr,
+	output        ppumem_read,
+	output        ppumem_write,
+	output  [7:0] ppumem_dout,
+	input   [7:0] ppumem_din,
+	output        refresh,
+
+	input  [20:0] prg_mask,
+	input  [19:0] chr_mask,
+
+	// Override for BRAM
+	output [17:0] bram_addr,      // address to access
+	input   [7:0] bram_din,       // Data from BRAM
+	output  [7:0] bram_dout,
+	output        bram_write,     // is a write operation
+	output        bram_override,
+
+	output  [8:0] cycle,
+	output  [8:0] scanline,
+	input         int_audio,
+	input         ext_audio,
+	output        apu_ce,
+	input         gg,
+	input [128:0] gg_code,
+	output        gg_avail,
+	input         gg_reset,
+	output  [2:0] emphasis,
+	output        save_written,
+	output        mapper_has_flashsaves,
+	input         debug_dots,
+
+	// savestates
+	output        mapper_has_savestate,
+	input         increaseSSHeaderCount,
+	input         save_state,
+	input         load_state,
+	input  [1:0]  savestate_number,
+	output        sleep_savestate,
+	output        state_loaded,
+
+	output        hsync,
+	output        hblank,
+	output        vsync,
+	output        vblank,
+	// Composite video at the RCA jack, two samples per clock.
+	output signed [23:0] composite_a,
+	output signed [23:0] composite_b,
+
+	output [24:0] Savestate_SDRAMAddr,
+	output        Savestate_SDRAMRdEn,
+	output        Savestate_SDRAMWrEn,
+	output [7:0]  Savestate_SDRAMWriteData,
+	input  [7:0]  Savestate_SDRAMReadData,
+
+	output [63:0] SaveStateExt_Din,
+	output [9:0]  SaveStateExt_Adr,
+	output        SaveStateExt_wren,
+	output        SaveStateExt_rst,
+	input  [63:0] SaveStateExt_Dout,
+	output        SaveStateExt_load,
+
+	output [63:0] SAVE_out_Din,  	// data read from savestate
+	input  [63:0] SAVE_out_Dout, 	// data written to savestate
+	output [25:0] SAVE_out_Adr,  	// all addresses are DWORD addresses!
+	output        SAVE_out_rnw,   // read = 1, write = 0
+	output        SAVE_out_ena,   // one cycle high for each action
+	output  [7:0] SAVE_out_be,
+	input         SAVE_out_done   // should be one cycle high when write is done or read value is valid
+);
+
+
+/**********************************************************/
+/*************            Clocks            ***************/
+/**********************************************************/
+
+// Master clock speed: NTSC/Dendy: 21.477272, PAL: 21.2813696
+
+// Cyc 123456789ABC123456789ABC123456789ABC123456789ABC
+// CPU ----M------C----M------C----M------C----M------C
+// PPU ---P---P---P---P---P---P---P---P---P---P---P---P
+//                2000011112222
+//  M: M2 Tick, C: CPU Tick, P: PPU Tick -: Idle Cycle
+//
+// On Mister, we must pre-fetch data from memory 4 cycles before it is needed.
+// Memory requests are aligned to the PPU clock and there are two types: CPU pre-fetch
+// and PPU pre-fetch. The CPU pre-fetch needs to be completed before the end of the CPU cycle, and
+// the PPU pre-fetch needs to be completed before each PPU CE is ticked.
+// The PPU_CE that acknowledges reads and writes always occurs after the M2 rising edge, and cart/mapper
+// CE's are always triggered on the rising edge of M2, which means that PPU will always see
+// any changes made by the cart mappers. Because the mapper on MiSTer is capable of changing the data that
+// is given to the CPU (banking, etc) the best time to run it is the first PPU cycle where the data from the
+// CPU is visible on the bus.
+//
+// The obvious issue is that the CPU and PPU pre-fetches will collide. Fortunately, because Nintendo
+// wanted to save pins, the ppu has to take two PPU ticks for every read, meaning there will always be
+// a minimum of one free PPU cycle in which to fit the CPU read. This does however create the issue that
+// we always need perfect alignment.
+//
+// Therefore, we can dervive the following order of operations:
+// - CPU pre-fetch should happen during first free PPU tick in a CPU cycle.
+// - Cart CE should happen on the second PPU tick in a CPU cycle always
+// - PPU read/write should happen on the last PPU tick in a CPU cycle (usually third)
+
+assign nes_div = div_sys;
+assign apu_ce = cpu_ce;
+
+wire [7:0] from_data_bus;
+wire [7:0] cpu_dout;
+reg  [7:0] open_bus_data;
+reg  [7:0] internal_bus_data;
+
+wire vs_mode = (sys_type == 2'b11);
+wire [7:0] joypad1_read_data;
+wire [7:0] joypad2_read_data;
+wire fds_eject_cart;
+
+// odd or even apu cycle, AKA div_apu or apu_/clk2. This is actually not 50% duty cycle. It is high for 18
+// master cycles and low for 6 master cycles. It is considered active when low or "even".
+reg odd_or_even = 1; // 1 == odd, 0 == even
+
+// Clock Dividers
+localparam div_cpu_n = 5'd12;
+localparam div_ppu_n = 3'd4;
+
+// Counters
+reg [4:0] div_cpu = 5'd1;
+reg [2:0] div_ppu = 3'd1;
+reg [1:0] div_sys = 2'd0;
+
+// CE's
+wire cpu_ce  = (div_cpu == div_cpu_n);
+wire ppu_ce  = (div_ppu == div_ppu_n);
+wire cart_ce = (div_cpu == div_cpu_n - 5'd2); // First PPU cycle where cpu data is visible.
+
+// Signals
+wire cart_pre  = (div_cpu >= div_cpu_n - 5'd6) && (div_cpu <= div_cpu_n - 5'd2);
+wire ppu_read  = (ppu_tick == 1);
+wire ppu_write = (ppu_tick == 1);
+
+wire phi2 = (div_cpu > 4 && div_cpu < div_cpu_n);
+
+// The infamous NES jitter is important for accuracy, but wreks havok on modern devices and scalers,
+// so what I do here is pause the whole system for one PPU clock and insert a "fake" ppu clock to
+// replace the missing pixel. Thus the system runs accurately (ableit a few nanoseconds per frame slower)
+// but all video devices stay happy.
+
+wire skip_pixel;
+reg freeze_clocks = 0;
+reg [4:0] faux_pixel_cnt;
+
+wire use_fake_h = freeze_clocks && faux_pixel_cnt < 6;
+reg [1:0] ppu_tick = 0;
+
+reg [1:0] last_sys_type;
+reg [2:0] cpu_tick_count;
+
+wire skip_ppu_cycle = (cpu_tick_count == 4) && (ppu_tick == 0);
+
+reg hold_reset = 0;
+reg bootvector_flag;
+wire cpu_reset = reset_ss | hold_reset;
+wire reset = cpu_reset | bootvector_flag;
+wire reset_noSS = reset_nes | hold_reset | bootvector_flag;
+
+// pause
+reg corepause_active       = 0;
+reg corepause_active_delay = 0;
+reg skip_pause_ce          = 0;
+reg  [7:0] corepause_delay = 8'd0;
+reg  [2:0] div_ppu_pause = 0;
+wire skip_pixel_pause;
+wire ppu_ce_pause = corepause_active ? (div_ppu_pause == div_ppu_n) : ppu_ce;
+wire render_ena;
+wire [8:0] cycle_paused;
+wire [8:0] scanline_paused;
+wire       is_in_vblank_paused;
+wire       evenframe;
+wire       evenframe_paused;
+
+assign corepaused = corepause_active;
+assign refresh    = corepause_active_delay && ppu_ce_pause;
+
+always @(posedge clk) begin
+	if (reset_nes) hold_reset <= 1;
+	if (cpu_ce) hold_reset <= 0;
+	if (~freeze_clocks | ~(div_ppu == (div_ppu_n - 1'b1))) begin
+		if (~skip_ppu_cycle)
+			div_cpu <= cpu_ce || (ppu_ce && div_cpu > div_cpu_n) ? 5'd1 : div_cpu + 5'd1;
+
+		div_ppu <= ppu_ce ? 3'd1 : div_ppu + 3'd1;
+
+		// reset the ticker on the first ppu tick at or after a cpu tick.
+		if (cpu_ce)
+			ppu_tick <= 0;
+		else if (ppu_ce)
+			ppu_tick <= ppu_tick + 1'b1;
+	end
+
+	// Add one extra PPU tick every 5 cpu cycles for PAL.
+	if (cpu_ce && (sys_type == 2'b01))
+		cpu_tick_count <= cpu_tick_count[2] ? 3'd0 : cpu_tick_count + 1'b1;
+
+	// SDRAM Clock
+	div_sys <= div_sys + 1'b1;
+
+	// De-Jitter shenanigans
+	if (faux_pixel_cnt == 3)
+		freeze_clocks <= 1'b0;
+
+	if (|faux_pixel_cnt)
+		faux_pixel_cnt <= faux_pixel_cnt - 1'b1;
+
+	if ((((skip_pixel && ~corepause_active) || (skip_pixel_pause && corepause_active)) && (faux_pixel_cnt == 0)) && !dejitter_timing) begin
+		freeze_clocks <= 1'b1;
+		faux_pixel_cnt <= {div_ppu_n - 1'b1, 1'b0} + 1'b1;
+	end
+
+
+	if (reset_nes | hold_reset) begin
+		bootvector_flag <= 1;
+		odd_or_even <= 1;
+	end else if (loading_savestate) begin
+		odd_or_even <= SS_TOP[0];
+	end else if (cpu_ce) begin
+		odd_or_even <= ~odd_or_even;
+		bootvector_flag <= 0;
+	end
+
+	// Realign if the system type changes.
+	last_sys_type <= sys_type;
+	if (last_sys_type != sys_type) begin
+		div_cpu <= 5'd1;
+		div_ppu <= 3'd1;
+		div_sys <= 0;
+		cpu_tick_count <= 0;
+	end
+
+	// pause
+	if (ppu_ce_pause) skip_pause_ce <= 0; // must skip the first CE after pause to sync back to correct ppu
+
+	if (reset_nes) begin
+		corepause_active       <= 0;
+		corepause_active_delay <= 0;
+	end else begin
+		if (corepause_active || (pausecore && div_cpu == 5'd1 && div_ppu == 3'd1 && div_sys == 0 && cpu_tick_count == 0 && ~freeze_clocks && is_in_vblank_paused && ~pause_cpu && cpu_Instrnew)) begin
+			div_cpu           <= 5'd1;
+			div_ppu           <= 3'd1;
+			div_sys           <= 0;
+			cpu_tick_count    <= 0;
+			corepause_active  <= 1;
+			div_ppu_pause     <= div_ppu + 3'd1;
+		end
+
+		if (corepause_active) begin
+
+			if (corepause_delay < 8'hFF) begin
+				corepause_delay <= corepause_delay + 1'd1;
+			end else begin
+				corepause_active_delay <= 1;
+			end
+
+			if (~freeze_clocks | ~(div_ppu_pause == (div_ppu_n - 1'b1))) begin
+				div_ppu_pause <= ppu_ce_pause ? 3'd1 : div_ppu_pause + 3'd1;
+				if (~pausecore && ppu_ce_pause && (cycle_paused == ppu_cycle) && (scanline_paused == scanline_ppu) && (evenframe == evenframe_paused)) begin
+					corepause_active       <= 0;
+					corepause_active_delay <= 0;
+					skip_pause_ce          <= 1;
+				end
+			end
+		end else begin
+			corepause_delay <= 8'd0;
+		end
+	end
+
+end
+
+assign SS_TOP_BACK[0] = odd_or_even;
+
+ClockGen clockgen_pause(
+	.clk                 (clk),
+	.ce                  (ppu_ce_pause && ~skip_pause_ce),
+	.reset               (reset_noSS),
+	.sys_type            (sys_type),
+	.is_rendering        (render_ena),
+	.scanline            (scanline_paused),
+	.cycle               (cycle_paused),
+	.is_in_vblank        (is_in_vblank_paused),
+	//.end_of_line         (end_of_line),
+	//.at_last_cycle_group (at_last_cycle_group),
+	//.exiting_vblank      (exiting_vblank),
+	//.entering_vblank     (entering_vblank),
+	//.is_pre_render       (is_pre_render_line),
+	.short_frame         (skip_pixel_pause),
+	//.is_vbe_sl           (is_vbe_sl)
+	.evenframe           (evenframe_paused)
+);
+
+/**********************************************************/
+/*************              CPU             ***************/
+/**********************************************************/
+
+// TODO: At some point the CPU, APU, and DMA need to be isolated into their own unit, as in the
+// actual system they were part of the same package and the internal bus was isolated in a variety
+// of ways from the external bus. This is represented here in the code, but in a way that is pretty
+// unintuitive to anyone who looks at it.
+
+wire [15:0] cpu_addr;
+wire cpu_rnw;
+wire pause_cpu;
+wire nmi;
+wire mapper_irq;
+wire apu_irq;
+wire cpu_Instrnew;
+// If the external bus is driven, electrically it will overwhelm the internal bus of register
+// 4015's output.
+wire apu_reg_cs = (apu_cs && addr[4:0] == 5'h15);
+wire [7:0] apu_reg_value = {apu_dout[7:6], internal_bus_data[5], apu_dout[4:0]}; // Fill in the undriven bit with bus.
+wire [7:0] internal_data_bus = (apu_reg_cs ? apu_reg_value : from_data_bus);
+
+T65 cpu(
+	.mode   (0),
+	.BCD_en (0),
+
+	.res_n  (~cpu_reset && ~cold_reset),
+	.pwr_n  (~cold_reset), // Cold boot, power reset, must be paired with reset
+	.clk    (clk),
+	.enable (cpu_ce),
+	.rdy    (~pause_cpu),
+
+	.IRQ_n  (~(apu_irq | mapper_irq)),
+	.NMI_n  (~nmi),
+	.R_W_n  (cpu_rnw),
+
+	.A      (cpu_addr),
+	.DI     (cpu_rnw ? internal_data_bus : cpu_dout),
+	.DO     (cpu_dout),
+
+	.Instrnew (cpu_Instrnew),
+
+	// savestates
+	.SaveStateBus_Din  (SaveStateBus_Din ),
+	.SaveStateBus_Adr  (SaveStateBus_Adr ),
+	.SaveStateBus_wren (SaveStateBus_wren),
+	.SaveStateBus_rst  (SaveStateBus_rst ),
+	.SaveStateBus_load (loading_savestate ),
+	.SaveStateBus_Dout (SaveStateBus_wired_or[0])
+);
+
+wire [15:0] dma_aout;
+wire dma_aout_enable;
+wire dma_read;
+wire [7:0] dma_data_to_ram;
+wire apu_dma_request, apu_dma_ack;
+wire [15:0] apu_dma_addr;
+
+// Determine the values on the bus outgoing from the CPU chip (after DMA / APU)
+wire [15:0] addr = dma_aout_enable ? dma_aout  : cpu_addr;
+wire [7:0] dma_data_bus = (joypad1_cs && dma_aout_enable) ? joypad1_read_data :
+	(joypad2_cs && dma_aout_enable) ? joypad2_read_data :
+	from_data_bus;
+wire [7:0]  dbus = dma_aout_enable ? dma_data_to_ram : cpu_dout;
+wire mr_int      = dma_aout_enable ? dma_read  : cpu_rnw;
+wire mw_int      = dma_aout_enable ? !dma_read : !cpu_rnw;
+wire get_ce, put_ce;
+
+DmaController dma(
+	.clk            (clk),
+	.ce             (cpu_ce),
+	.reset          (reset_noSS),
+	.put_cycle      (odd_or_even),                // Even or odd cycle
+	.sprite_trigger (apu_cs && addr[4:0] == 5'h14 && ~cpu_rnw), // Sprite trigger
+	.dmc_trigger    (apu_dma_request),            // DMC Trigger
+	.cpu_read       (cpu_rnw),                    // CPU in a read cycle?
+	.data_from_cpu  (cpu_dout),                   // Data from cpu
+	.dma_data_to_ram  (internal_data_bus),              // Data from RAM etc.
+	.dmc_dma_addr   (apu_dma_addr),               // DMC addr
+	.aout           (dma_aout),
+	.aout_enable    (dma_aout_enable),
+	.read           (dma_read),
+	.data_to_ram    (dma_data_to_ram),
+	.dmc_ack        (apu_dma_ack),
+	.pause_cpu      (pause_cpu),
+	.get_ce         (get_ce),
+	.put_ce         (put_ce)
+);
+
+
+/**********************************************************/
+/*************             APU              ***************/
+/**********************************************************/
+
+// The APU is part of the 2A03 and parts of it are not exposed to external busses.
+wire apu_cs = cpu_addr[15:5] == 11'b0100_0000_000;
+wire [7:0] apu_dout;
+wire [15:0] sample_apu;
+
+APU apu(
+	.MMC5           (1'b0),
+	.clk            (clk),
+	.PHI2           (phi2),
+	.CS             (apu_cs),
+	.PAL            (sys_type == 2'b01),
+	.ce             (apu_ce),
+	.reset          (reset),
+	.cold_reset     (cold_reset),
+	.ADDR           (addr[4:0]),
+	.RW             (cpu_rnw),
+	.DIN            (dbus),
+	.DOUT           (apu_dout),
+	.audio_channels (audio_channels),
+	.Sample         (sample_apu),
+	.DmaReq         (apu_dma_request),
+	.DmaAck         (apu_dma_ack),
+	.DmaAddr        (apu_dma_addr),
+	.DmaData        (dma_data_bus),
+	.get_or_put     (odd_or_even),
+	.IRQ            (apu_irq),
+	.put_ce         (put_ce),
+	.get_ce         (get_ce),
+	// savestates
+	.SaveStateBus_Din  (SaveStateBus_Din ),
+	.SaveStateBus_Adr  (SaveStateBus_Adr ),
+	.SaveStateBus_wren (SaveStateBus_wren),
+	.SaveStateBus_rst  (SaveStateBus_rst ),
+	.SaveStateBus_load (loading_savestate ),
+	.SaveStateBus_Dout (SaveStateBus_wired_or[1])
+);
+defparam apu.SSREG_INDEX_TOP  = SSREG_INDEX_APU_TOP;
+defparam apu.SSREG_INDEX_DMC1 = SSREG_INDEX_APU_DMC1;
+defparam apu.SSREG_INDEX_DMC2 = SSREG_INDEX_APU_DMC2;
+defparam apu.SSREG_INDEX_FCT  = SSREG_INDEX_APU_FCT;
+
+assign sample = sample_a;
+reg [15:0] sample_a;
+
+always @* begin
+	case (audio_en)
+		0: sample_a = 16'd0;
+		1: sample_a = sample_ext;
+		2: sample_a = sample_inverted;
+		3: sample_a = sample_ext;
+	endcase
+end
+
+wire [15:0] sample_inverted = 16'hFFFF - sample_apu;
+wire [1:0] audio_en = {int_audio, ext_audio};
+wire [15:0] audio_mappers = (audio_en == 2'd1) ? 16'd0 : sample_inverted;
+
+
+// Joypads are mapped into the APU's range.
+wire joypad1_cs = apu_cs && addr[4:0] == 5'h16;
+wire joypad2_cs = apu_cs && addr[4:0] == 5'h17;
+
+VsCoinInput vs_coin_input
+(
+	.clk(clk),
+	.reset(reset),
+	.enable(vs_mode),
+	.ppu_ce(ppu_ce),
+	.vblank(vblank),
+	.coin_button(fds_eject),
+	.dip_switches(vs_dip_switches),
+	.protection_type(mapper_flags[52:49]),
+	.controller_strobe(joy_out[0]),
+	.controller_read(joypad_clock),
+	.joypad1_data_in(joypad1_data),
+	.joypad2_data_in(joypad2_data),
+	.open_bus_in(ext_bus_driven[7:5]),
+	.joypad1_data_out(joypad1_read_data),
+	.joypad2_data_out(joypad2_read_data),
+	.fds_eject_out(fds_eject_cart),
+	.coin_active()
+);
+
+reg [2:0] joy_out;
+reg [2:0] joy_latch;
+always @(posedge clk) begin
+	if (put_ce) joy_out <= joy_latch;
+	if (joypad1_cs && ~cpu_rnw) begin
+		joy_latch <= cpu_dout[2:0];
+		if (put_ce) joy_out <= cpu_dout[2:0];
+	end
+end
+
+assign joypad_out = joy_out;
+assign joypad_clock = {joypad2_cs && cpu_rnw, joypad1_cs && cpu_rnw};
+
+
+/**********************************************************/
+/*************             PPU              ***************/
+/**********************************************************/
+
+// The real PPU has a CS pin which is a combination of the output of the 74319 (ppu address selector)
+// and the M2 pin from the CPU. This will only be low for 1 and 7/8th PPU cycles, or
+// 7 and 1/2 master cycles on NTSC. Therefore, the PPU should read or write once per cpu cycle, and
+// with our alignment, this should occur at PPU cycle 2 (the *third* cycle).
+wire mr_ppu     = mr_int && ppu_read; // Read *from* the PPU.
+wire mw_ppu     = mw_int && ppu_write; // Write *to* the PPU.
+wire ppu_cs = addr >= 'h2000 && addr < 'h4000;
+wire [7:0] ppu_dout;            // Data from PPU to CPU
+wire chr_read, chr_write, chr_read_ex;       // If PPU reads/writes from VRAM
+wire [13:0] chr_addr, chr_addr_ex;           // Address PPU accesses in VRAM
+wire [7:0] chr_from_ppu;        // Data from PPU to VRAM
+wire [7:0] chr_to_ppu;
+wire [8:0] ppu_cycle;
+wire [8:0] scanline_ppu;
+assign cycle = use_fake_h ? 9'd340 : (corepause_active) ? cycle_paused : ppu_cycle;
+assign scanline = (corepause_active) ? scanline_paused : scanline_ppu;
+
+wire signed [23:0] ppu_pin_a, ppu_pin_b;
+
+PPU ppu(
+	.clk              (clk),
+	.cs               (addr[15:13] == 3'b001 && phi2),
+	.RWn              (mr_int && !mw_int),
+	.rst_behavior     (ppu_rst_behavior),
+	.ce               (ppu_ce),
+	.reset            (reset),
+	.sys_type         (sys_type),
+	.vs_ppu_type      (mapper_flags[48:45]),
+	.debug_dots       (debug_dots),
+	.color            (color),
+	.din              (dbus),
+	.dout             (ppu_dout),
+	.ain              (addr[2:0]),
+	.read             (ppu_cs && mr_ppu),
+	.write            (ppu_cs && mw_ppu),
+	.nmi              (nmi),
+	.vram_r           (chr_read),
+	.vram_r_ex        (chr_read_ex),
+	.vram_w           (chr_write),
+	.vram_addr        (chr_addr),
+	.vram_a_ex        (chr_addr_ex),
+	.vram_dbus_in     (chr_to_ppu),
+	.vram_dout        (chr_from_ppu),
+	.scanline         (scanline_ppu),
+	.cycle            (ppu_cycle),
+	.emphasis         (emphasis),
+	.short_frame      (skip_pixel),
+	.extra_sprites    (ex_sprites),
+	.mask             (mask),
+	.render_ena_out   (render_ena),
+	.evenframe        (evenframe),
+	.hblank           (hblank),
+	.vblank           (vblank),
+	.hsync            (hsync),
+	.vsync            (vsync),
+	.composite_a      (ppu_pin_a),
+	.composite_b      (ppu_pin_b),
+	// savestates
+	.SaveStateBus_Din       (SaveStateBus_Din        ),
+	.SaveStateBus_Adr       (SaveStateBus_Adr        ),
+	.SaveStateBus_wren      (SaveStateBus_wren       ),
+	.SaveStateBus_rst       (SaveStateBus_rst        ),
+	.SaveStateBus_load      (loading_savestate       ),
+	.SaveStateBus_Dout      (SaveStateBus_wired_or[2]),
+	.Savestate_OAMAddr      (Savestate_OAMAddr       ),
+	.Savestate_OAMRdEn      (Savestate_OAMRdEn       ),
+	.Savestate_OAMWrEn      (Savestate_OAMWrEn       ),
+	.Savestate_OAMWriteData (Savestate_OAMWriteData  ),
+	.Savestate_OAMReadData  (Savestate_OAMReadData   )
+);
+
+// Motherboard and RF module analog path from pin 21 to the RCA jack.
+
+composite_board composite_board(
+	.clk              (clk),
+	.reset            (reset_noSS),
+	.pin_a            (ppu_pin_a),
+	.pin_b            (ppu_pin_b),
+	.rca_a            (composite_a),
+	.rca_b            (composite_b)
+);
+
+
+/**********************************************************/
+/*************             Cart             ***************/
+/**********************************************************/
+
+wire [15:0] prg_addr = addr;
+wire [7:0] prg_din = (dbus & (prg_conflict ? cpumem_din : 8'hFF)) | (prg_conflict_d0 ? cpumem_din & 8'h01 : 8'h00);
+
+wire prg_read  = mr_int && cart_pre && (addr[15:5] != 11'b0100_0000_000) && !ppu_cs;
+wire prg_write = mw_int && cart_pre;
+
+wire prg_allow, vram_a10, vram_ce, chr_allow;
+wire [24:0] prg_linaddr;
+wire [21:0] chr_linaddr;
+wire [7:0] prg_dout_mapper, chr_from_ppu_mapper;
+wire [15:0] sample_ext;
+wire has_chr_from_ppu_mapper, prg_bus_write, prg_conflict, prg_conflict_d0, has_flashsaves;
+
+assign save_written = has_flashsaves ? (!prg_linaddr[24] && prg_write && prg_allow) :                            // Flash save: writes to PRG-ROM
+                      (mapper_flags[7:0] == 8'h14) ? (prg_linaddr[21:18] == 4'b1111 && prg_write && prg_allow) : // Mapper 20/FDS
+                      (prg_addr[15:13] == 3'b011 && prg_write) | bram_write;                                     // Default - $6000-$7FFF or BRAM
+
+assign mapper_has_flashsaves = has_flashsaves;
+
+cart_top multi_mapper (
+	// FPGA specific
+	.clk               (clk),
+	.reset             (reset_noSS),
+	.vs_mode           (vs_mode),
+	.flags             (mapper_flags),            // iNES header data (use 0 while loading)
+	.paused            (freeze_clocks),
+	// Cart pins (slightly abstracted)
+	.ce                (cart_ce & ~reset_noSS),   // M2 (held in high impedance during reset)
+	.cpu_ce            (cpu_ce),                  // Serves as M2 Inverted
+	.prg_ain           (prg_addr),                // CPU Address in (a15 abstracted from ROMSEL)
+	.prg_read          (prg_read),                // CPU RnW split
+	.prg_write         (prg_write),               // CPU RnW split
+	.prg_din           (prg_din),                 // CPU Data bus in (split from bid)
+	.prg_dout          (prg_dout_mapper),         // CPU Data bus out (split from bid)
+	.chr_ex            (chr_read_ex),             // Flag indicating to use extra sprite addr
+	.chr_ain_orig      (chr_addr),                // PPU address in
+	.chr_ain_ex        (chr_addr_ex),             // PPU address for extra sprites
+	.chr_read          (chr_read),                // PPU read (inverted, active high)
+	.chr_write         (chr_write),               // PPU write (inverted, active high)
+	.chr_din           (chr_from_ppu),            // PPU data bus in (split from bid)
+	.chr_dout          (chr_from_ppu_mapper),     // PPU data bus in (split from bid)
+	.vram_a10          (vram_a10),                // CIRAM a10 line
+	.vram_ce           (vram_ce),                 // CIRAM chip enable
+	.irq               (mapper_irq),              // IRQ (inverted, active high)
+	.audio_in          (audio_mappers),           // Amplified and inverted APU audio
+	.audio             (sample_ext),              // Mixed audio output from cart
+	// SDRAM Communication
+	.prg_aout          (prg_linaddr),             // SDRAM adjusted PRG RAM address
+	.prg_allow         (prg_allow),               // Simulates internal CE/Locking
+	.chr_aout          (chr_linaddr),             // SDRAM adjusted CHR RAM address
+	.chr_allow         (chr_allow),               // Simulates internal CE/Locking
+	.prg_mask          (prg_mask),                // PRG Mask for SDRAM translation
+	.chr_mask          (chr_mask),                // CHR Mask for SDRAM translation
+	// External hardware interface (EEPROM)
+	.mapper_addr       (bram_addr),
+	.mapper_data_in    (bram_din),
+	.mapper_data_out   (bram_dout),
+	.mapper_prg_write  (bram_write),
+	.mapper_ovr        (bram_override),
+	// Cheats
+	.prg_from_ram      (from_data_bus),           // Hacky cpu din <= get rid of this!
+	// Behavior helper flags
+	.has_chr_dout      (has_chr_from_ppu_mapper), // Output specific data for CHR rather than from SDRAM
+	.prg_bus_write     (prg_bus_write),           // PRG data driven to bus
+	.prg_conflict      (prg_conflict),            // Simulate bus conflicts
+	.has_savestate     (mapper_has_savestate),    // Mapper supports savestates
+	.prg_conflict_d0   (prg_conflict_d0),         // Simulate bus conflicts for Mapper 144
+	.has_flashsaves    (has_flashsaves),          // Homebrew mapper that saves to PRG-ROM in flash memory
+	// User input/FDS controls
+	.fds_eject         (fds_eject_cart),          // FDS button is a coin input in Vs. mode
+	.fds_busy          (fds_busy),                // Used to trigger FDS disk changes
+	.fds_fast          (fds_fast),
+	.diskside          (diskside),
+	.max_diskside      (max_diskside),
+	.fds_auto_eject    (fds_auto_eject),
+
+	// savestates
+	.SaveStateBus_Din  (SaveStateBus_Din ),
+	.SaveStateBus_Adr  (SaveStateBus_Adr ),
+	.SaveStateBus_wren (SaveStateBus_wren),
+	.SaveStateBus_rst  (SaveStateBus_rst ),
+	.SaveStateBus_load (loading_savestate ),
+	.SaveStateBus_Dout (SaveStateBus_wired_or[3]),
+
+	.Savestate_MAPRAMactive   (Savestate_MAPRAMactive),
+	.Savestate_MAPRAMAddr     (Savestate_MAPRAMAddr),
+	.Savestate_MAPRAMRdEn     (Savestate_MAPRAMRdEn),
+	.Savestate_MAPRAMWrEn     (Savestate_MAPRAMWrEn),
+	.Savestate_MAPRAMWriteData(Savestate_MAPRAMWriteData),
+	.Savestate_MAPRAMReadData (Savestate_MAPRAMReadData)
+);
+
+wire [7:0] vs_protection_data;
+wire       vs_protection_data_valid;
+wire [4:0] vs_protection_state;
+
+VsProtection vs_protection
+(
+	.clk(clk),
+	.reset(reset),
+	.load(loading_savestate),
+	.enable(vs_mode),
+	.protection_type(mapper_flags[52:49]),
+	.ce(cart_ce && !reset),
+	.read(prg_read),
+	.address(prg_addr),
+	.state_in(SS_TOP[21:17]),
+	.state_out(vs_protection_state),
+	.data_valid(vs_protection_data_valid),
+	.data(vs_protection_data)
+);
+
+wire genie_ovr;
+wire [7:0] genie_data;
+
+CODES codes (
+	.clk        (clk),
+	.reset      (gg_reset),
+	.enable     (~gg),
+	.addr_in    (addr),
+	.data_in    (prg_allow ? cpumem_din : prg_dout_mapper),
+	.code       (gg_code),
+	.available  (gg_avail),
+	.genie_ovr  (genie_ovr),
+	.genie_data (genie_data)
+);
+
+
+/**********************************************************/
+/*************       Bus Arbitration        ***************/
+/**********************************************************/
+
+assign chr_to_ppu = has_chr_from_ppu_mapper ? chr_from_ppu_mapper : ppumem_din;
+
+assign cpumem_addr  = prg_linaddr;
+assign cpumem_read  = (prg_read & prg_allow) | (prg_write && prg_conflict);
+assign cpumem_write = prg_write && prg_allow;
+assign cpumem_dout  = prg_din;
+assign ppumem_addr  = chr_linaddr;
+assign ppumem_read  = chr_read;
+assign ppumem_write = chr_write && (chr_allow || vram_ce);
+assign ppumem_dout  = chr_from_ppu;
+
+always @(posedge clk) begin
+	if (loading_savestate) begin
+		open_bus_data <= SS_TOP[8:1];
+		internal_bus_data <= SS_TOP[29:22];
+	end else begin
+		if (!cpu_ce) begin
+			open_bus_data <= mw_int ? dbus : dma_data_bus;
+			internal_bus_data <= mw_int ? dbus : internal_data_bus;
+		end
+	end
+end
+
+assign from_data_bus = genie_ovr ? genie_data : external_data_bus;
+
+reg [7:0] ext_bus_driven;
+
+wire [7:0] external_data_bus = (joypad1_cs && ~dma_aout_enable) ? joypad1_read_data :
+	(joypad2_cs && ~dma_aout_enable) ? joypad2_read_data : ext_bus_driven;
+
+always @* begin
+	if (reset) begin
+		ext_bus_driven = SS_TOP[16:9]; // 0;
+	end else if (ppu_cs) begin                          // PPU Read
+		ext_bus_driven = ppu_dout;
+	end else if (vs_protection_data_valid) begin        // Vs. CPU protection device
+		ext_bus_driven = vs_protection_data;
+	end else if (prg_allow) begin                       // PRG Read
+		ext_bus_driven = cpumem_din;
+	end else if (prg_bus_write) begin                   // PRG/CPU Write
+		ext_bus_driven = prg_dout_mapper;
+	end else begin                                      // Open Bus
+		ext_bus_driven = open_bus_data;
+	end
+end
+
+assign SS_TOP_BACK[ 8: 1] = open_bus_data;
+assign SS_TOP_BACK[16: 9] = ext_bus_driven;
+assign SS_TOP_BACK[21:17] = vs_protection_state;
+assign SS_TOP_BACK[29:22] = internal_bus_data;
+assign SS_TOP_BACK[63:30] = 34'b0; // free to be used
+
+
+/**********************************************************/
+/*************       Savestates             ***************/
+/**********************************************************/
+
+wire [63:0] SaveStateBus_Din;
+wire [9:0] SaveStateBus_Adr;
+wire SaveStateBus_wren, SaveStateBus_rst;
+
+wire [7:0]  Savestate_RAMWriteData;
+wire [7:0]  Savestate_RAMReadData;
+wire [24:0] Savestate_RAMAddr;
+wire        Savestate_RAMRdEn;
+wire        Savestate_RAMWrEn;
+wire [2:0]  Savestate_RAMType;
+
+localparam SAVESTATE_MODULES    = 5;
+wire [63:0] SaveStateBus_wired_or[0:SAVESTATE_MODULES-1];
+
+wire reset_ss;
+wire reset_delay;
+wire savestate_savestate;
+wire savestate_loadstate;
+wire [31:0] savestate_address;
+wire savestate_busy;
+
+wire [63:0] SS_TOP;
+wire [63:0] SS_TOP_BACK;
+eReg_SavestateV #(SSREG_INDEX_TOP, SSREG_DEFAULT_TOP) iREG_SAVESTATE_TOP (clk, SaveStateBus_Din, SaveStateBus_Adr, SaveStateBus_wren, SaveStateBus_rst, SaveStateBus_wired_or[4], SS_TOP_BACK, SS_TOP);
+
+wire [63:0] SaveStateBus_Dout  = SaveStateBus_wired_or[0] | SaveStateBus_wired_or[1] | SaveStateBus_wired_or[2] | SaveStateBus_wired_or[3] | SaveStateBus_wired_or[4] | SaveStateExt_Dout;
+
+wire loading_savestate;
+wire saving_savestate;
+wire sleep_savestates;
+wire sleep_rewind;
+
+assign Savestate_SDRAMAddr      = Savestate_RAMAddr;
+assign Savestate_SDRAMRdEn      = Savestate_RAMRdEn && (Savestate_RAMType > 1);
+assign Savestate_SDRAMWrEn      = Savestate_RAMWrEn && (Savestate_RAMType > 1);
+assign Savestate_SDRAMWriteData = Savestate_RAMWriteData;
+
+wire [7:0] Savestate_OAMAddr      = Savestate_RAMAddr[7:0];
+wire       Savestate_OAMRdEn      = Savestate_RAMRdEn && (Savestate_RAMType == 0);
+wire       Savestate_OAMWrEn      = Savestate_RAMWrEn && (Savestate_RAMType == 0);
+wire [7:0] Savestate_OAMWriteData = Savestate_RAMWriteData;
+wire [7:0] Savestate_OAMReadData;
+
+wire        Savestate_MAPRAMactive    = loading_savestate | saving_savestate;
+wire [12:0] Savestate_MAPRAMAddr      = Savestate_RAMAddr[12:0];
+wire        Savestate_MAPRAMRdEn      = Savestate_RAMRdEn && (Savestate_RAMType == 1);
+wire        Savestate_MAPRAMWrEn      = Savestate_RAMWrEn && (Savestate_RAMType == 1);
+wire [7:0]  Savestate_MAPRAMWriteData = Savestate_RAMWriteData;
+wire [7:0]  Savestate_MAPRAMReadData;
+
+assign Savestate_RAMReadData = (Savestate_RAMType == 0) ? Savestate_OAMReadData :
+										 (Savestate_RAMType == 1) ? Savestate_MAPRAMReadData :
+										 Savestate_SDRAMReadData;
+
+assign SaveStateExt_Din  = SaveStateBus_Din;
+assign SaveStateExt_Adr  = SaveStateBus_Adr;
+assign SaveStateExt_wren = SaveStateBus_wren;
+assign SaveStateExt_rst  = SaveStateBus_rst;
+assign SaveStateExt_load = loading_savestate;
+
+
+savestates savestates (
+	.clk                    (clk),
+	.reset_in               (reset_nes),
+	.reset_ss               (reset_ss),
+	.reset_delay            (reset_delay),
+
+	.load_done              (state_loaded),
+
+	.increaseSSHeaderCount  (increaseSSHeaderCount),
+	.save                   (savestate_savestate),
+	.load                   (savestate_loadstate),
+	.savestate_address      (savestate_address),
+	.savestate_busy         (savestate_busy),
+
+	.paused                 (corepause_active_delay),
+
+	.BUS_Din                (SaveStateBus_Din),
+	.BUS_Adr                (SaveStateBus_Adr),
+	.BUS_wren               (SaveStateBus_wren),
+	.BUS_rst                (SaveStateBus_rst),
+	.BUS_Dout               (SaveStateBus_Dout),
+
+	.loading_savestate      (loading_savestate),
+	.saving_savestate       (saving_savestate),
+	.sleep_savestate        (sleep_savestates),
+
+	.Save_RAMAddr           (Savestate_RAMAddr),
+	.Save_RAMRdEn           (Savestate_RAMRdEn),
+	.Save_RAMWrEn           (Savestate_RAMWrEn),
+	.Save_RAMWriteData      (Savestate_RAMWriteData),
+	.Save_RAMReadData       (Savestate_RAMReadData),
+	.Save_RAMType           (Savestate_RAMType),
+
+	.bus_out_Din            (SAVE_out_Din),
+	.bus_out_Dout           (SAVE_out_Dout),
+	.bus_out_Adr            (SAVE_out_Adr),
+	.bus_out_rnw            (SAVE_out_rnw),
+	.bus_out_ena            (SAVE_out_ena),
+	.bus_out_be             (SAVE_out_be),
+	.bus_out_done           (SAVE_out_done)
+);
+
+statemanager #(58720256, 33554432) statemanager (
+	.clk                 (clk),
+	.reset               (reset_nes),
+
+	.rewind_on           (1'b0),
+	.rewind_active       (1'b0),
+
+	.savestate_number    (savestate_number),
+	.save                (save_state),
+	.load                (load_state),
+
+	.sleep_rewind        (sleep_rewind),
+	.vsync               (1'b0),
+
+	.request_savestate   (savestate_savestate),
+	.request_loadstate   (savestate_loadstate),
+	.request_address     (savestate_address),
+	.request_busy        (savestate_busy)
+);
+
+assign sleep_savestate = sleep_rewind | sleep_savestates;
+
+endmodule
+
+
+module VsProtection
+(
+	input        clk,
+	input        reset,
+	input        load,
+	input        enable,
+	input  [3:0] protection_type,
+	input        ce,
+	input        read,
+	input [15:0] address,
+	input  [4:0] state_in,
+	output [4:0] state_out,
+	output       data_valid,
+	output reg [7:0] data
+);
+
+reg [4:0] protection_state;
+
+wire chip127_enable = enable && (protection_type == 4'd1);
+wire chip128_enable = enable && (protection_type == 4'd2);
+wire xevious_enable = enable && (protection_type == 4'd3);
+wire protection_enable = chip127_enable || chip128_enable || xevious_enable;
+
+// Chip 127 ignores A11. Chip 128 fully decodes only $5E00/$5E01.
+wire chip127_address = (address[15:12] == 4'h5) && (address[10:1] == 10'h300);
+wire chip128_address = (address[15:1] == 15'h2F00);
+wire sequence_address = (chip127_enable && chip127_address) ||
+	(chip128_enable && chip128_address);
+wire sequence_reset = read && sequence_address && !address[0];
+wire sequence_read = read && sequence_address && address[0];
+
+wire xevious_toggle = xevious_enable && read && (address == 16'h54FF);
+wire xevious_data_valid = xevious_enable && read &&
+	((address == 16'h54FF) || (address == 16'h5678) ||
+	 (address == 16'h578F) || (address == 16'h5567));
+
+assign state_out = protection_state;
+assign data_valid = sequence_reset || sequence_read || xevious_data_valid;
+
+always @(posedge clk) begin
+	if(reset || !protection_enable)
+		protection_state <= 5'd0;
+	else if(load)
+		protection_state <= state_in;
+	else if(ce && sequence_reset)
+		protection_state <= 5'd0;
+	else if(ce && sequence_read)
+		protection_state <= protection_state + 5'd1;
+	else if(ce && xevious_toggle)
+		protection_state <= {4'd0, !protection_state[0]};
+end
+
+always @* begin
+	case(protection_state)
+		5'h00: data = 8'hFF;
+		5'h01: data = chip128_enable ? 8'hBF : 8'hFD;
+		5'h02: data = chip128_enable ? 8'hB7 : 8'hF5;
+		5'h03: data = chip128_enable ? 8'h97 : 8'hF4;
+		5'h04: data = chip128_enable ? 8'h97 : 8'hB4;
+		5'h05: data = chip128_enable ? 8'h17 : 8'hB4;
+		5'h06: data = chip128_enable ? 8'h57 : 8'hA6;
+		5'h07: data = chip128_enable ? 8'h4F : 8'h2E;
+		5'h08: data = chip128_enable ? 8'h6F : 8'h2F;
+		5'h09: data = chip128_enable ? 8'h6B : 8'h6F;
+		5'h0A: data = chip128_enable ? 8'hEB : 8'h6F;
+		5'h0B: data = chip128_enable ? 8'hA9 : 8'h7D;
+		5'h0C: data = chip128_enable ? 8'hB1 : 8'hD5;
+		5'h0D: data = chip128_enable ? 8'h90 : 8'hD4;
+		5'h0E: data = 8'h94;
+		5'h0F: data = chip128_enable ? 8'h14 : 8'h94;
+		5'h10: data = chip128_enable ? 8'h56 : 8'h86;
+		5'h11: data = chip128_enable ? 8'h4E : 8'h2E;
+		5'h12: data = chip128_enable ? 8'h6F : 8'h2F;
+		5'h13: data = chip128_enable ? 8'h6B : 8'h6F;
+		5'h14: data = chip128_enable ? 8'hEB : 8'h6B;
+		5'h15: data = chip128_enable ? 8'hA9 : 8'h79;
+		5'h16: data = chip128_enable ? 8'hB1 : 8'hD1;
+		5'h17: data = chip128_enable ? 8'h90 : 8'hD0;
+		5'h18: data = chip128_enable ? 8'hD4 : 8'h92;
+		5'h19: data = chip128_enable ? 8'h5C : 8'h92;
+		5'h1A: data = chip128_enable ? 8'h3E : 8'h8D;
+		5'h1B: data = chip128_enable ? 8'h26 : 8'h65;
+		5'h1C: data = chip128_enable ? 8'h87 : 8'h64;
+		5'h1D: data = chip128_enable ? 8'h83 : 8'h34;
+		5'h1E: data = chip128_enable ? 8'h13 : 8'hB0;
+		5'h1F: data = chip128_enable ? 8'h00 : 8'hA2;
+	endcase
+
+	if(sequence_reset)
+		data = 8'h00;
+	else if(xevious_enable) begin
+		case(address)
+			16'h54FF: data = 8'h05;
+			16'h5678: data = protection_state[0] ? 8'h01 : 8'h00;
+			16'h578F: data = protection_state[0] ? 8'h89 : 8'hD1;
+			16'h5567: data = protection_state[0] ? 8'h37 : 8'h3E;
+			default: data = 8'h00;
+		endcase
+	end
+end
+
+endmodule
+
+
+module VsCoinInput
+(
+	input        clk,
+	input        reset,
+	input        enable,
+	input        ppu_ce,
+	input        vblank,
+	input        coin_button,
+	input  [7:0] dip_switches,
+	input  [3:0] protection_type,
+	input        controller_strobe,
+	input  [1:0] controller_read,
+	input  [4:0] joypad1_data_in,
+	input  [4:0] joypad2_data_in,
+	input  [2:0] open_bus_in,
+	output [7:0] joypad1_data_out,
+	output [7:0] joypad2_data_out,
+	output       fds_eject_out,
+	output       coin_active
+);
+
+reg       coin_button_d;
+reg       vblank_d;
+reg [2:0] coin_frames;
+reg [2:0] joypad1_index;
+reg [2:0] joypad2_index;
+reg [1:0] controller_read_d;
+
+assign coin_active = |coin_frames;
+wire force_start = enable && ((protection_type == 4'd4) || (protection_type == 4'd6));
+wire joypad1_serial = (force_start && (joypad1_index == 3'd3)) ? 1'b1 : joypad1_data_in[0];
+wire joypad2_serial = (force_start && (joypad2_index == 3'd3)) ? 1'b1 : joypad2_data_in[0];
+
+assign joypad1_data_out = enable ? {2'b00, coin_active, dip_switches[1:0], 2'b00, joypad1_serial} :
+	{open_bus_in, joypad1_data_in};
+assign joypad2_data_out = enable ? {dip_switches[7:2], 1'b0, joypad2_serial} :
+	{open_bus_in, joypad2_data_in};
+assign fds_eject_out = coin_button && !enable;
+
+always @(posedge clk) begin
+	if(reset || !enable) begin
+		coin_button_d <= coin_button;
+		vblank_d <= vblank;
+		coin_frames <= 3'd0;
+		joypad1_index <= 3'd0;
+		joypad2_index <= 3'd0;
+		controller_read_d <= controller_read;
+	end else begin
+		coin_button_d <= coin_button;
+		if(ppu_ce) vblank_d <= vblank;
+		controller_read_d <= controller_read;
+
+		if(controller_strobe) begin
+			joypad1_index <= 3'd0;
+			joypad2_index <= 3'd0;
+		end else begin
+			if(!controller_read[0] && controller_read_d[0] && !(&joypad1_index))
+				joypad1_index <= joypad1_index + 3'd1;
+			if(!controller_read[1] && controller_read_d[1] && !(&joypad2_index))
+				joypad2_index <= joypad2_index + 3'd1;
+		end
+
+		if(coin_button && !coin_button_d && !coin_active)
+			coin_frames <= 3'd4;
+		else if(ppu_ce && vblank && !vblank_d && coin_active)
+			coin_frames <= coin_frames - 3'd1;
+	end
+end
+
+endmodule

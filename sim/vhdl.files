@@ -1,0 +1,8 @@
+# Vendored VHDL, packages FIRST: ModelSim resolves them at compile time.
+# Only what is instantiated -- an unused wrapper can fail to compile.
+rtl/cpu/t80/T80_Pack.vhd
+rtl/cpu/t80/T80_Reg.vhd
+rtl/cpu/t80/T80_ALU.vhd
+rtl/cpu/t80/T80_MCode.vhd
+rtl/cpu/t80/T80.vhd
+rtl/cpu/t80/T80se.vhd

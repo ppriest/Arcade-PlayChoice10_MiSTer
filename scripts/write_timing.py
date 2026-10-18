@@ -28,7 +28,7 @@ from mame_capture import (NO_WINDOW, lua_env, lua_runner_env, mame_cmd,  # noqa:
                           mame_paths, regions, spec)
 
 
-def run(game, skip, frames, coin=0, tag="", extra=""):
+def run(game, skip, frames, coin=0, tag="", extra="", bios=""):
     mame_dir, exe = mame_paths()
     r = regions()
     out = REPO / "debug" / "wtiming" / f"{game}{tag}.txt"
@@ -45,7 +45,7 @@ def run(game, skip, frames, coin=0, tag="", extra=""):
                WT_IN_HOLD=inp.get("hold", "P1 Right"), WT_IN_PULSE=inp.get("pulse", "P1 Button 1"))
     cmd = mame_cmd(exe, game, "wtiming.lua", mame_dir,
                    ["-snapshot_directory", (out.parent / f"snap{tag}").as_posix(),
-                    "-snapview", "native"])
+                    "-snapview", "native"] + (["-bios", bios] if bios else []))
     subprocess.run(cmd, cwd=str(mame_dir), env=env, capture_output=True, timeout=3600, **NO_WINDOW)
     return out
 
@@ -93,11 +93,12 @@ def main():
     ap.add_argument("--extra", default="", help="more taps, name:hexlo:hexhi[,...]")
     ap.add_argument("--tag", default="", help="suffix for the result file")
     ap.add_argument("--reuse", action="store_true", help="report existing results only")
+    ap.add_argument("--bios", default="", help="MAME -bios for the run")
     a = ap.parse_args()
     for g in a.sets:
         path = REPO / "debug" / "wtiming" / f"{g}{a.tag}.txt"
         if not a.reuse or not path.exists():
-            run(g, a.skip, a.frames, a.coin, a.tag, a.extra)
+            run(g, a.skip, a.frames, a.coin, a.tag, a.extra, a.bios)
         if not path.exists():
             print(f"{g}: no result (MAME failed?)\n")
             continue
