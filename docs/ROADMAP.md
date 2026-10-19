@@ -67,6 +67,9 @@ board with MAME's colours; sound is not yet judged, and the 60 Hz question is op
   outputs, only while a gun set runs. On the board (build `28cd4c0`), Duck Hunt starts, the
   crosshair draws and follows the aim, and ducks are hit; the user played it and reports it works well (`debug/hw/gun/s1.png`, `s3.png`:
   score 1,000 then 2,000). `sim/pc10_gun_tb`: 20 checks pass.
+- `72d1dff` (+1.903 ns): NES_MiSTer's MMC2 had no RAM at 0x6000, where PlayChoice-10
+  Punch-Out!! keeps its leaderboard (NES_MiSTer issue 390); it now maps 8 KB there when the
+  header has a battery. On the board the game gets past the leaderboard after Glass Joe (user).
 - Open in Phase 2: sound, by ear (the APU is NES_MiSTer's; SOUNDMASK mutes it).
 - Phase 1, `rtl/bios/`: the Z80 (T80 from BallySente), map, LS259 latches, NMI and watchdog,
   INT DETECT, RP5H01, and the BIOS display. `sim/bios_boot_tb` from reset on pc_smb: 8,393,343 Z80

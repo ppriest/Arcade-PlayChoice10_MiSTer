@@ -165,7 +165,12 @@ always @* begin
 	endcase
 end
 
-assign prg_aout = {5'b00_000, prgsel, prg_ain[12:0]};
+// Local change (PlayChoice-10): with the header's battery bit, 8 KB of RAM at $6000-$7FFF, as
+// the PlayChoice-10 Punch-Out!! board (MAME playch10.cpp, board E NVRAM) has; it freezes after
+// the first fight without it (NES_MiSTer issue 390). Retail headers have no battery: unchanged.
+wire prg_is_ram = flags[25] && prg_ain >= 'h6000 && prg_ain < 'h8000;
+wire [21:0] prg_ram = {9'b11_1100_000, prg_ain[12:0]};
+assign prg_aout = prg_is_ram ? prg_ram : {5'b00_000, prgsel, prg_ain[12:0]};
 
 // The CHR bank to load. Each increment here is 4kb. So valid values are 0..31.
 reg [4:0] chrsel;
@@ -184,7 +189,7 @@ assign chr_aout = {5'b100_00, chrsel, chr_ain[11:0]};
 assign vram_a10 = mirroring ? chr_ain[11] : chr_ain[10];
 assign vram_ce = chr_ain[13];
 
-assign prg_allow = prg_ain[15] && !prg_write;
+assign prg_allow = prg_ain[15] && !prg_write || prg_is_ram;
 assign chr_allow = flags[15];
 
 // savestate

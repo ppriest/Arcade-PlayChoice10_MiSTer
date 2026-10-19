@@ -29,6 +29,9 @@ with Quartus Prime 17.0.2 Lite for the DE10-nano. This is an extension of
 
 ## History
 
+`Arcade-PlayChoice10_20261020.rbf`: **alpha release**
+- Mike Tyson's Punch-Out!!: Add the WRAM to the MMC2 mapper ([NES_MiSTer issue 390](https://github.com/MiSTer-devel/NES_MiSTer/issues/390))
+
 `Arcade-PlayChoice10_20261019.rbf`: **alpha release**
 - Zapper support for Duck Hunt, Hogan's Alley and Wild Gunman: mouse, analog stick or d-pad, with an
   optional crosshair
@@ -189,7 +192,7 @@ combinational cells, two per ALM.
 
 ![Floorplan of PlayChoice10](docs/floorplan/PlayChoice10.png)
 
-`845aeaf`, fitted Oct 18 2026; per-block counts in `docs/floorplan/PlayChoice10_groups.md`.
+`72d1dff`, fitted Oct 19 2026; per-block counts in `docs/floorplan/PlayChoice10_groups.md`.
 
 ## Installation
 
@@ -256,7 +259,8 @@ progress; `docs/LESSONS_LEARNED.md` is what it cost.
   (`debug/hw/gun/`)
 * Audio mix (Mono, None, 25%, 50%): n/a, the board is mono
 * Hiscore saving (`hiscore.v`, with autosave): not yet
-* NVRAM / EEPROM saved to the `.nvm` file: not yet checked (Punch-Out!!'s battery RAM)
+* NVRAM / EEPROM saved to the `.nvm` file: not yet checked (Punch-Out!!'s battery RAM, which
+  the game now has: it gets past the leaderboard after the first fight)
 * Fast ROM loading via DDR: n/a, a game is at most 512 KB
 * Pause (with CPU suspended): not yet
 * Sound: playing, not yet compared with MAME
@@ -276,12 +280,12 @@ progress; `docs/LESSONS_LEARNED.md` is what it cost.
 
 ### Resource usage
 
-`845aeaf`, release revision, fitter seed default, on the DE10-nano's Cyclone V 5CSEBA6, speed
-grade 7, every clock meeting timing (worst `clk_sys` setup slack +1.398 ns):
+`72d1dff`, release revision, fitter seed default, on the DE10-nano's Cyclone V 5CSEBA6, speed
+grade 7, every clock meeting timing (worst `clk_sys` setup slack +1.903 ns):
 
 | resource | used | available |
 | --- | --- | --- |
-| Logic (ALMs) | 34,974 | 41,910 |
+| Logic (ALMs) | 34,929 | 41,910 |
 | Block memory bits | 1,800,932 | 5,662,720 |
 | RAM blocks | 251 | 553 |
 | DSP blocks | 47 | 112 |
