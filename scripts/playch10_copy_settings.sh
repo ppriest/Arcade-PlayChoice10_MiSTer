@@ -6,23 +6,23 @@
 # Each .mra has its game's MAME setname (pc_smb, pc_miket, ...), and Main_MiSTer keeps the OSD
 # settings (config/<setname>.CFG) and the joystick maps (config/inputs/<setname>_input_*.map)
 # per setname. Set the core up once in one game, run this from the Scripts menu, and every
-# setname used by a PlayChoice-10 .mra on the SD card (cabinets' playch10 included) gets the
-# same settings. DIP switches are kept per .mra and are not touched.
+# PlayChoice-10 setname (cabinets' playch10 included) gets the same settings. DIP switches are
+# kept per .mra and are not touched.
 #
 # Copy to /media/fat/Scripts on the SD card.
 
 CFG="${PC10_CONFIG:-/media/fat/config}"
-ARCADE="${PC10_ARCADE:-/media/fat/_Arcade}"
 
-# every setname in a PlayChoice-10 .mra
-targets=$(find "$ARCADE" -name '*.mra' -print0 2>/dev/null \
-	| xargs -0 grep -l '<rbf>PlayChoice10</rbf>' 2>/dev/null \
-	| while IFS= read -r f; do sed -n 's:.*<setname>\([A-Za-z0-9_]*\)</setname>.*:\1:p' "$f"; done \
-	| sort -u)
-if [ -z "$targets" ]; then
-	echo "No PlayChoice-10 .mra files under $ARCADE."
-	exit 1
-fi
+# The setnames releases/*.mra use (build_mra.py), plus any other pc_* CFG already saved, such as
+# a cabinet given its own setname. Scanning _Arcade instead takes minutes on a full card.
+SETS="playch10 pc_1942 pc_bball pc_bfght pc_bload pc_bstar pc_cntra pc_cshwk pc_cvnia pc_dbldr
+pc_ddrgn pc_drmro pc_duckh pc_ebike pc_ftqst pc_gntlt pc_golf pc_goons pc_grdue pc_grdus pc_hgaly
+pc_kngfu pc_mario pc_miket pc_mman3 pc_moglf pc_mtoid pc_ngai2 pc_ngai3 pc_ngaid pc_pinbt pc_pwbld
+pc_pwrst pc_radr2 pc_radrc pc_rcpam pc_rkats pc_rnatk pc_rrngr pc_rygar pc_sjetm pc_smb pc_smb2
+pc_smb3 pc_suprc pc_tbowl pc_tenis pc_tkfld pc_tmnt pc_tmnt2 pc_trjan pc_ttoon pc_vball pc_virus
+pc_wcup pc_wgnmn pc_ynoid"
+targets=$( { for t in $SETS; do echo "$t"; done
+	for f in "$CFG"/pc_*.CFG; do [ -f "$f" ] && basename "$f" .CFG; done; } | sort -u)
 
 # the suggestion: the most recently changed PlayChoice-10 CFG
 suggest=""

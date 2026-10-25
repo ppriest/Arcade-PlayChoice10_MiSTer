@@ -221,8 +221,8 @@ tools (tty2oled, tty2rpi and others) read to identify the game. MiSTer keeps the
 (`config/<setname>.CFG`) and the joystick maps per setname, so each game starts with its own.
 To share them: set the core up in one game, then run `playch10_copy_settings` from the Scripts
 menu. It suggests the most recently changed PlayChoice-10 settings, and copies that set's CFG
-and joystick maps to every setname used by a PlayChoice-10 `.mra` on the SD card. DIP switches
-are kept per `.mra` and are not copied.
+and joystick maps to every game's setname, `playch10` and any other `pc_*` settings already
+saved. DIP switches are kept per `.mra` and are not copied.
 
 ## Controls
 
