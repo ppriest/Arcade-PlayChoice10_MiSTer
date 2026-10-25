@@ -58,6 +58,10 @@ board with MAME's colours; sound is not yet judged, and the 60 Hz question is op
 - All 56 sets have an `.mra` (`build_mra.py --all`, all validating, setname `playch10` so the
   core has one CFG); board C (The Goonies) is mapper 87. Build `9256699`+: +1.943 ns, 83% ALMs,
   42% DSP after the composite path and the scaler's adaptive filter went (timing).
+- Each game's `.mra` now carries its own setname (`pc_smb`, ...), which marquee tools read
+  (issue 1, ppriest/Arcade-PlayChoice10_MiSTer); cabinets default to `playch10`, changeable on
+  the cabinet page and by `--setname`. `scripts/playch10_copy_settings.sh` (MiSTer Scripts
+  menu) copies one set's CFG and joystick maps to every PlayChoice-10 setname.
 - Phase 4, part: build `0715d37` (+2.063 ns, 84% ALMs, 251 M10K) gives the gun sets an NES 2.0
   header with expansion device 0x08, which turns NES_MiSTer's Zapper on for their channel, its
   trigger masked by CNTRLMASK (`pc10_in1_r`); CRT Adjust on the analog path; NES_MiSTer's

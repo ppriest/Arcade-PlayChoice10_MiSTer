@@ -29,6 +29,12 @@ with Quartus Prime 17.0.2 Lite for the DE10-nano. This is an extension of
 
 ## History
 
+MRAs only (core unchanged, `Arcade-PlayChoice10_20261020.rbf`)
+- Each game's MRA uses its MAME setname (`pc_smb`, ...), so marquee tools can identify it; settings
+  saved under `playch10` can be copied to every set with
+  [`playch10_copy_settings.sh`](scripts/playch10_copy_settings.sh) ([issue 1](https://github.com/ppriest/Arcade-PlayChoice10_MiSTer/issues/1))
+- The cabinet builder has a Setname field (default `playch10`)
+
 `Arcade-PlayChoice10_20261020.rbf`: **alpha release**
 - Mike Tyson's Punch-Out!!: Add the WRAM to the MMC2 mapper ([NES_MiSTer issue 390](https://github.com/MiSTer-devel/NES_MiSTer/issues/390))
 
@@ -149,6 +155,9 @@ The real cabinet holds up to ten carts, so unlike e.g. MAME, you cna build your 
   `python scripts/build_mra.py --cabinet "My Cabinet" pc_smb3 pc_mman3 pc_ngaid`, channel 1
   first.
 
+A cabinet's setname defaults to `playch10`, so cabinets share one set of OSD settings; the page's
+*Setname* field (or `--setname`) changes it, for example to a game's own set for its marquee.
+
 `releases/PlayChoice-10 (three channels).mra` is an example.
 
 ## Hardware
@@ -204,8 +213,16 @@ combinational cells, two per ALM.
   `_Arcade/_PlayChoice10` (or another subdirectory of `_Arcade` starting with an underscore).
 * Put the MAME 0.289 ROM sets in `games/mame`: each game's zip and the BIOS, `playch10.zip`.
 
-Every `.mra` names the set `playch10`, so the OSD settings and DIP switches are one file for the
-core, whichever game or cabinet runs.
+* Optional: put [`scripts/playch10_copy_settings.sh`](scripts/playch10_copy_settings.sh) in
+  `Scripts` on the SD card.
+
+Each game's `.mra` carries its MAME setname (`pc_smb`, `pc_miket`, ...), which marquee and status
+tools (tty2oled, tty2rpi and others) read to identify the game. MiSTer keeps the OSD settings
+(`config/<setname>.CFG`) and the joystick maps per setname, so each game starts with its own.
+To share them: set the core up in one game, then run `playch10_copy_settings` from the Scripts
+menu. It suggests the most recently changed PlayChoice-10 settings, and copies that set's CFG
+and joystick maps to every setname used by a PlayChoice-10 `.mra` on the SD card. DIP switches
+are kept per `.mra` and are not copied.
 
 ## Controls
 

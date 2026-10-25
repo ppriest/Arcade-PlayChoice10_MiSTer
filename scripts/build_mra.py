@@ -190,15 +190,16 @@ def inst_prom(m):
     return [part(inst[0], "0000 INST ROM"), part(bios_part(roms, "rp5h01")[0], "2000 RP5H01")]
 
 
-def build(sets, games, xml, mv, title=None):
+def build(sets, games, xml, mv, title=None, setname=None):
     """Channel 1 is sets[0] (index 4 with the BIOS board, index 1 its cart); channel n of 2-10
     is sets[n-1]: index 15 + n its cart, index 31 + n its INST ROM and RP5H01 (PlayChoice10.sv).
-    To make a cabinet by hand, copy a channel's two blocks and change the zip and parts."""
+    To make a cabinet by hand, copy a channel's two blocks and change the zip and parts.
+    setname: a game's own MAME set unless given (a cabinet's is CABINET_SETNAME)."""
     first = sets[0]
     g, m = games[first], xml[first]
     if cart_image(first, g, m) is None:
         return None
-    out = header(escape(title or g["desc"]), g, mv) + channel1(first, g, m)
+    out = header(escape(title or g["desc"]), g, mv, setname or first) + channel1(first, g, m)
     for n, s in enumerate(sets[1:], 2):
         gs, ms = games[s], xml[s]
         if cart_image(s, gs, ms) is None:
@@ -210,15 +211,18 @@ def build(sets, games, xml, mv, title=None):
 # The pieces of a .mra, shared with scripts/build_cabinet_page.py, whose page assembles the
 # same lines in the browser.
 
-def header(title_xml, g, mv):
+# A cabinet's default setname: MAME's BIOS set, so cabinets share one CFG
+CABINET_SETNAME = "playch10"
+
+
+def header(title_xml, g, mv, setname):
     """The opening lines. title_xml is already XML-escaped; year and manufacturer are channel
-    1's."""
+    1's. Main_MiSTer names the OSD's CFG and the joystick maps after the setname (DIPs follow
+    the .mra's file name), and marquee tools (tty2oled, tty2rpi) read it to know the game."""
     return [
         "<misterromdescription>",
         f"\t<name>{title_xml}</name>",
-        # MAME's BIOS set for every .mra: Main_MiSTer names the OSD's CFG (and the DIP file)
-        # after it, so the core's settings are one file, whichever game or cabinet runs
-        "\t<setname>playch10</setname>",
+        f"\t<setname>{setname}</setname>",
         f"\t<mameversion>{mv}</mameversion>",
         f"\t<year>{g['year']}</year>",
         f"\t<manufacturer>{escape(g['maker'])}</manufacturer>",
@@ -271,6 +275,8 @@ def main():
     ap.add_argument("--out", default=str(core_root() / "releases"))
     ap.add_argument("--cabinet", metavar="TITLE",
                     help="one .mra holding every set given, channel 1 first (at most 10)")
+    ap.add_argument("--setname", default=CABINET_SETNAME,
+                    help="a cabinet's setname (default %(default)s): the CFG and joystick maps' name")
     a = ap.parse_args()
     games = driver_games()
     mv = mame_version()
@@ -285,7 +291,7 @@ def main():
     if a.cabinet and len(a.sets) > 10:
         raise SystemExit("ten channels at most")
     for sets, title in jobs:
-        text = build(sets, games, xml, mv, title)
+        text = build(sets, games, xml, mv, title, a.setname if title else None)
         if text is None:
             print(f"skip  {sets[0]}: board {games[sets[0]]['config']} has no mapper yet")
             continue

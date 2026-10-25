@@ -47,12 +47,13 @@ def main():
             "chn": "\n".join(bm.channel(s, g, m, "@N@", "@CART@", "@INST@")),
         })
     out.sort(key=lambda d: d["name"].lower())
-    header = bm.header("@TITLE@", {"year": "@YEAR@", "maker": "@MAKER@"}, mv)
+    header = bm.header("@TITLE@", {"year": "@YEAR@", "maker": "@MAKER@"}, mv, "@SETNAME@")
     data = {
         "header": "\n".join(header),
         "footer": "\n".join(bm.footer()),
         "games": out,
         "example": EXAMPLE,
+        "setname": bm.CABINET_SETNAME,
     }
     # inside <script type="application/json">: only "</" could end the element early
     blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")

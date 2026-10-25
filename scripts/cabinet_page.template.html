@@ -115,6 +115,12 @@ pre { margin: 8px 0 0; max-height: 40vh; overflow: auto; background: var(--field
     <h2 id="h-chan"><span>Channels</span><span id="used"></span></h2>
     <label for="title" class="note">Cabinet name (the menu entry, and the file name)</label>
     <input id="title" type="text" value="PlayChoice-10 Best Of">
+    <label for="setname" class="note">Setname (the settings file, and the game other tools see)</label>
+    <input id="setname" type="text" value="playch10" maxlength="31" spellcheck="false"
+      pattern="[A-Za-z0-9_]+" aria-describedby="setname-help"
+      title="MiSTer names this cabinet's OSD settings (setname.CFG) and joystick maps after it, so cabinets with the same setname share them. Marquee and status tools (tty2oled, tty2rpi and others) read it to identify the running title. Letters, digits and _; empty means playch10.">
+    <p id="setname-help" class="note">Default <code>playch10</code>: every cabinet shares one set of
+      OSD settings. A game's own set (<code>pc_smb</code>) gives that game's marquee.</p>
     <ul id="channels" aria-live="polite"></ul>
     <p class="note">Channel 1 also carries the BIOS. Drag to reorder, or use the arrows.</p>
     <div class="row">
@@ -154,12 +160,13 @@ function load() {
     if (saved && Array.isArray(saved.sets)) {
       chans = saved.sets.filter(s => bySet[s]).slice(0, MAX);
       if (typeof saved.title === "string") $("title").value = saved.title;
+      if (typeof saved.setname === "string") $("setname").value = saved.setname;
     }
   } catch (e) { /* no storage: start empty */ }
   if (!chans.length) chans = DATA.example.filter(s => bySet[s]);
 }
 function save() {
-  try { localStorage.setItem("pc10-cabinet", JSON.stringify({ sets: chans, title: $("title").value })); }
+  try { localStorage.setItem("pc10-cabinet", JSON.stringify({ sets: chans, title: $("title").value, setname: $("setname").value })); }
   catch (e) { /* not kept between visits */ }
 }
 
@@ -167,8 +174,11 @@ function buildMra() {
   if (!chans.length) return "";
   const first = bySet[chans[0]];
   const title = $("title").value.trim() || "PlayChoice-10 Cabinet";
+  // Main_MiSTer keeps 31 characters; anything outside [A-Za-z0-9_] is dropped
+  const setname = $("setname").value.replace(/[^A-Za-z0-9_]/g, "").slice(0, 31) || DATA.setname;
   let lines = DATA.header
-    .replace("@TITLE@", esc(title)).replace("@YEAR@", first.year).replace("@MAKER@", first.maker)
+    .replace("@TITLE@", esc(title)).replace("@SETNAME@", setname)
+    .replace("@YEAR@", first.year).replace("@MAKER@", first.maker)
     .split("\n");
   lines = lines.concat(first.ch1.split("\n"));
   chans.slice(1).forEach((s, i) => {
@@ -274,6 +284,7 @@ function update() {
 
 $("search").addEventListener("input", renderGames);
 $("title").addEventListener("input", update);
+$("setname").addEventListener("input", update);
 $("clear").onclick = () => { chans = []; update(); };
 $("download").onclick = () => {
   const blob = new Blob([buildMra()], { type: "application/xml" });
