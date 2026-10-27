@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// PlayChoice-10. Phase 0: NES_MiSTer's NES.sv (rtl/nes/PROVENANCE.md), unchanged apart
-// from the core name and the two .mif paths, running one cart with no BIOS board.
+// PlayChoice-10 core, derived from NES_MiSTer (rtl/nes/PROVENANCE.md).
+// The BIOS board and multi-channel cabinet logic are implemented locally.
 //
 // Copyright (c) 2012-2013 Ludvig Strigeus
 // MiSTer port: Copyright (C) 2017,2018 Sorgelig
