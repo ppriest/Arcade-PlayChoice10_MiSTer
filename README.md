@@ -35,7 +35,7 @@ MRAs only (core unchanged, `Arcade-PlayChoice10_20261020.rbf`)
   [`playch10_copy_settings.sh`](scripts/playch10_copy_settings.sh) ([issue 1](https://github.com/ppriest/Arcade-PlayChoice10_MiSTer/issues/1))
 - The cabinet builder has a Setname field (default `playch10`)
 
-`Arcade-PlayChoice10_20261020.rbf`: **alpha release**
+`Arcade-PlayChoice10_20261020.rbf`: **release**
 - Mike Tyson's Punch-Out!!: Add the WRAM to the MMC2 mapper ([NES_MiSTer issue 390](https://github.com/MiSTer-devel/NES_MiSTer/issues/390))
 
 `Arcade-PlayChoice10_20261019.rbf`: **alpha release**
@@ -258,42 +258,11 @@ Known issues:
 right. `docs/HACKS.md` lists this core's own approximations. `docs/ROADMAP.md` is the plan and its
 progress; `docs/LESSONS_LEARNED.md` is what it cost.
 
-### Features
-
-* DIP switches from the `.mra` (`DIP;` in the OSD): done. The two 6-bit switches are split in two,
-  as MiSTer allows at most 32 settings a switch
-* Inputs: done, two players, the BIOS buttons, and MAME's keys
-* CRT Adjust (H-Position, V-Shift, H-Size; no V-Size), Audio & Video page: in, not yet checked on
-  the board
-* HDMI scaling (integer scale, crop, crop offset): NES_MiSTer's options, not checked here
-* HDMI rotation (orientation): the stacked monitors turned CW or CCW; one picture turned, not yet
-* Flip screen, HDMI and analog, from the OSD or the DIP (fake DIP where the game has none): not yet
-* HDMI-only options hidden under direct video: not yet
-* Peripheral menus shown only for games that use them: done, the gun options; NES_MiSTer's
-  System Type, Multitap, peripherals, Famicom keyboard and disk options are removed
-* Rotary joysticks (Ikari Warriors controls, GRS keystroke mode), where used: n/a
-* Light guns: mouse, analog stick and d-pad, crosshair. Duck Hunt plays on the board
-  (`debug/hw/gun/`)
-* Audio mix (Mono, None, 25%, 50%): n/a, the board is mono
-* Hiscore saving (`hiscore.v`, with autosave): not yet
-* NVRAM / EEPROM saved to the `.nvm` file: not yet checked (Punch-Out!!'s battery RAM, which
-  the game now has: it gets past the leaderboard after the first fight)
-* Fast ROM loading via DDR: n/a, a game is at most 512 KB
-* Pause (with CPU suspended): not yet
-* Sound: playing, not yet compared with MAME
-* Savestates (optional): not yet (NES_MiSTer's cover the NES side only)
-* Cheats (optional): not yet
-
 ### Todo
 
 - [x] Light guns for Duck Hunt, Hogan's Alley and Wild Gunman
-- [ ] Play Hogan's Alley and Wild Gunman on the board
 - [ ] Check CRT Adjust on an analog monitor
 - [ ] Pause, flip screen, hiscore
-- [x] Hide NES_MiSTer's NES-only OSD entries
-- [ ] Per-game button names
-- [ ] Sound against MAME, by ear
-- [ ] First release
 
 ### Resource usage
 
